@@ -1,0 +1,21 @@
+[package]
+name = "bc"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+crossterm = "0.29.0"
+glob = "0.3.4"
+ratatui = "0.30.2"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+toml = "1.1.8"
+
+[dev-dependencies]
+tempfile = "3.27.0"
+
+[[bin]]
+name = "bclaude"
+path = "src/main.rs"
