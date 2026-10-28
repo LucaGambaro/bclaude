@@ -57,7 +57,12 @@ fn event_loop(terminal: &mut ratatui::DefaultTerminal, app: &mut App, paths: &Pa
             app.sessions = sessions::list_alive(&paths.sessions_dir(), &paths.run_dir())?;
             continue;
         }
-        let Event::Key(KeyEvent { code, kind: KeyEventKind::Press, .. }) = event::read().map_err(tty)? else {
+        let Event::Key(KeyEvent {
+            code,
+            kind: KeyEventKind::Press,
+            ..
+        }) = event::read().map_err(tty)?
+        else {
             continue;
         };
         match handle_key(app, code) {
@@ -80,8 +85,20 @@ mod tests {
 
     fn app() -> App {
         let library = Library::from_entries(vec![
-            crate::library::Entry { kind: Kind::Skill, name: "a".into(), description: None, path: "/x".into(), size_bytes: 1 },
-            crate::library::Entry { kind: Kind::Skill, name: "b".into(), description: None, path: "/x".into(), size_bytes: 1 },
+            crate::library::Entry {
+                kind: Kind::Skill,
+                name: "a".into(),
+                description: None,
+                path: "/x".into(),
+                size_bytes: 1,
+            },
+            crate::library::Entry {
+                kind: Kind::Skill,
+                name: "b".into(),
+                description: None,
+                path: "/x".into(),
+                size_bytes: 1,
+            },
         ]);
         App::new(Config::default(), library, vec![])
     }

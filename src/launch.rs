@@ -43,7 +43,10 @@ pub fn run(bin: &str, args: &[OsString]) -> Result<i32> {
     let status = Command::new(bin)
         .args(args)
         .status()
-        .map_err(|source| BcError::Launch { bin: bin.to_string(), source })?;
+        .map_err(|source| BcError::Launch {
+            bin: bin.to_string(),
+            source,
+        })?;
     Ok(status.code().unwrap_or(1))
 }
 
@@ -61,27 +64,50 @@ mod tests {
     }
 
     fn strs(args: &[OsString]) -> Vec<String> {
-        args.iter().map(|a| a.to_string_lossy().into_owned()).collect()
+        args.iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
     }
 
     #[test]
     fn builds_flags_then_user_args() {
-        let args = build_args(&composed(Some("/p"), Some("/m")), &["-c".into(), "--model".into(), "x".into()]);
+        let args = build_args(
+            &composed(Some("/p"), Some("/m")),
+            &["-c".into(), "--model".into(), "x".into()],
+        );
         assert_eq!(
             strs(&args),
-            ["--plugin-dir", "/p", "--append-system-prompt-file", "/m", "-c", "--model", "x"]
+            [
+                "--plugin-dir",
+                "/p",
+                "--append-system-prompt-file",
+                "/m",
+                "-c",
+                "--model",
+                "x"
+            ]
         );
     }
 
     #[test]
     fn omits_flags_when_nothing_composed() {
-        assert_eq!(strs(&build_args(&composed(None, None), &["-p".into()])), ["-p"]);
-        assert_eq!(strs(&build_args(&composed(None, Some("/m")), &[])), ["--append-system-prompt-file", "/m"]);
+        assert_eq!(
+            strs(&build_args(&composed(None, None), &["-p".into()])),
+            ["-p"]
+        );
+        assert_eq!(
+            strs(&build_args(&composed(None, Some("/m")), &[])),
+            ["--append-system-prompt-file", "/m"]
+        );
     }
 
     #[test]
     fn renders_quoting_whitespace_args() {
-        let args = vec![OsString::from("--x"), OsString::from("a b"), OsString::from("")];
+        let args = vec![
+            OsString::from("--x"),
+            OsString::from("a b"),
+            OsString::from(""),
+        ];
         assert_eq!(render_command("claude", &args), "claude --x 'a b' ''");
     }
 
@@ -93,6 +119,9 @@ mod tests {
 
     #[test]
     fn run_reports_missing_binary() {
-        assert!(matches!(run("definitely-not-a-binary-bc", &[]), Err(BcError::Launch { .. })));
+        assert!(matches!(
+            run("definitely-not-a-binary-bc", &[]),
+            Err(BcError::Launch { .. })
+        ));
     }
 }

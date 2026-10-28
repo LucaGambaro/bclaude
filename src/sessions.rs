@@ -19,7 +19,10 @@ pub struct SessionRecord {
 }
 
 pub fn now_unix() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 pub fn record_path(dir: &Path, pid: u32) -> PathBuf {

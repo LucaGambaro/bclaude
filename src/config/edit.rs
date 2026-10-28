@@ -5,7 +5,11 @@ impl Config {
     /// Adds or removes `name` from the profile's list (creating the profile if needed).
     /// Returns true when the config changed.
     pub fn set_membership(&mut self, profile: &str, kind: Kind, name: &str, on: bool) -> bool {
-        let list = self.profiles.entry(profile.to_string()).or_default().list_mut(kind);
+        let list = self
+            .profiles
+            .entry(profile.to_string())
+            .or_default()
+            .list_mut(kind);
         let present = list.iter().any(|n| n == name);
         match (on, present) {
             (true, false) => {

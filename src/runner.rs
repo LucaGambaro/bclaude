@@ -31,7 +31,12 @@ pub fn prepare(paths: &Paths, cwd: &Path, pid: u32, user_args: &[String]) -> Res
     }
     let composed = compose(&resolved, &library, &session_dir)?;
     let args = launch::build_args(&composed, user_args);
-    Ok(Prepared { resolved, composed, args, session_dir })
+    Ok(Prepared {
+        resolved,
+        composed,
+        args,
+        session_dir,
+    })
 }
 
 pub fn record_for(prepared: &Prepared, cwd: &Path, pid: u32) -> SessionRecord {
@@ -79,9 +84,18 @@ mod tests {
     fn setup() -> (tempfile::TempDir, Paths) {
         let dir = tempfile::tempdir().unwrap();
         let paths = Paths::new(dir.path().join("bc"), dir.path().join("home"));
-        write(&paths.config_file(), "[profiles.global]\nskills=[\"s\"]\nclaude_md=[\"m\"]\n");
-        write(&paths.kind_dir(crate::types::Kind::Skill).join("s/SKILL.md"), "s");
-        write(&paths.kind_dir(crate::types::Kind::ClaudeMd).join("m.md"), "m");
+        write(
+            &paths.config_file(),
+            "[profiles.global]\nskills=[\"s\"]\nclaude_md=[\"m\"]\n",
+        );
+        write(
+            &paths.kind_dir(crate::types::Kind::Skill).join("s/SKILL.md"),
+            "s",
+        );
+        write(
+            &paths.kind_dir(crate::types::Kind::ClaudeMd).join("m.md"),
+            "m",
+        );
         (dir, paths)
     }
 
@@ -118,7 +132,12 @@ mod tests {
         let code = run_session(&paths, Path::new("/any"), &[], "true").unwrap();
         assert_eq!(code, 0);
         assert!(sessions::list(&paths.sessions_dir()).unwrap().is_empty());
-        assert!(!paths.run_dir().join(std::process::id().to_string()).exists());
+        assert!(
+            !paths
+                .run_dir()
+                .join(std::process::id().to_string())
+                .exists()
+        );
     }
 
     #[test]
@@ -134,7 +153,11 @@ mod tests {
         let (_d, paths) = setup();
         let pid = std::process::id();
         let p = prepare(&paths, Path::new("/any"), pid, &[]).unwrap();
-        let rec = sessions::write(&paths.sessions_dir(), &record_for(&p, Path::new("/any"), pid)).unwrap();
+        let rec = sessions::write(
+            &paths.sessions_dir(),
+            &record_for(&p, Path::new("/any"), pid),
+        )
+        .unwrap();
         cleanup(&rec, &p.session_dir).unwrap();
         assert!(!rec.exists() && !p.session_dir.exists());
         cleanup(&rec, &p.session_dir).unwrap();

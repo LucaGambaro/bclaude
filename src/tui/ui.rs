@@ -16,7 +16,11 @@ fn headers(tab: Tab) -> [&'static str; 4] {
 pub fn draw(frame: &mut Frame, app: &App) {
     let [tabs_area, body, footer] = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(5), Constraint::Length(2)])
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(5),
+            Constraint::Length(2),
+        ])
         .areas(frame.area());
     let [list_area, preview_area] = Layout::default()
         .direction(Direction::Horizontal)
@@ -28,8 +32,16 @@ pub fn draw(frame: &mut Frame, app: &App) {
     frame.render_widget(
         Tabs::new(titles)
             .select(selected_tab)
-            .block(Block::default().borders(Borders::ALL).title(" betterClaude "))
-            .highlight_style(Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(" betterClaude "),
+            )
+            .highlight_style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
         tabs_area,
     );
 
@@ -38,13 +50,28 @@ pub fn draw(frame: &mut Frame, app: &App) {
         .into_iter()
         .map(|r| {
             let mark = if r.member { "●" } else { " " };
-            let style = if r.member { Style::default().fg(Color::Green) } else { Style::default() };
-            Row::new([Cell::from(mark), Cell::from(r.name), Cell::from(r.extra), Cell::from(r.detail)]).style(style)
+            let style = if r.member {
+                Style::default().fg(Color::Green)
+            } else {
+                Style::default()
+            };
+            Row::new([
+                Cell::from(mark),
+                Cell::from(r.name),
+                Cell::from(r.extra),
+                Cell::from(r.detail),
+            ])
+            .style(style)
         })
         .collect();
     let table = Table::new(
         rows,
-        [Constraint::Length(2), Constraint::Percentage(30), Constraint::Percentage(22), Constraint::Min(10)],
+        [
+            Constraint::Length(2),
+            Constraint::Percentage(30),
+            Constraint::Percentage(22),
+            Constraint::Min(10),
+        ],
     )
     .header(Row::new(headers(app.tab)).style(Style::default().add_modifier(Modifier::BOLD)))
     .block(Block::default().borders(Borders::ALL))

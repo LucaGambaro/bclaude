@@ -30,11 +30,25 @@ pub fn render_ls(library: &Library, config: &Config, kind: Option<Kind>) -> Stri
     if entries.is_empty() {
         return "(library is empty — use `bclaude add` or `bclaude import`)\n".to_string();
     }
-    let name_w = entries.iter().map(|e| e.name.chars().count()).max().unwrap_or(4).max(4);
-    let mut out = format!("{} {} {} DESCRIPTION\n", pad("KIND", 5), pad("NAME", name_w), pad("PROFILES", 18));
+    let name_w = entries
+        .iter()
+        .map(|e| e.name.chars().count())
+        .max()
+        .unwrap_or(4)
+        .max(4);
+    let mut out = format!(
+        "{} {} {} DESCRIPTION\n",
+        pad("KIND", 5),
+        pad("NAME", name_w),
+        pad("PROFILES", 18)
+    );
     for e in entries {
         let profiles = config.profiles_including(e.kind, &e.name);
-        let profiles = if profiles.is_empty() { "-".to_string() } else { profiles.join(",") };
+        let profiles = if profiles.is_empty() {
+            "-".to_string()
+        } else {
+            profiles.join(",")
+        };
         out.push_str(&format!(
             "{} {} {} {}\n",
             pad(e.kind.label(), 5),
@@ -47,7 +61,12 @@ pub fn render_ls(library: &Library, config: &Config, kind: Option<Kind>) -> Stri
 }
 
 /// Explains what applies to `cwd`, why, and the estimated context cost.
-pub fn render_which(cwd: &Path, resolved: &Resolved, composed: &Composed, library: &Library) -> String {
+pub fn render_which(
+    cwd: &Path,
+    resolved: &Resolved,
+    composed: &Composed,
+    library: &Library,
+) -> String {
     let mut out = format!("cwd: {}\n\nprofiles:\n", cwd.display());
     if resolved.activations.is_empty() {
         out.push_str("  (none)\n");
@@ -72,9 +91,14 @@ pub fn render_which(cwd: &Path, resolved: &Resolved, composed: &Composed, librar
             }
         }
     }
-    out.push_str(&format!("\nestimated context: ~{total} tokens (files only)\n"));
+    out.push_str(&format!(
+        "\nestimated context: ~{total} tokens (files only)\n"
+    ));
     if !composed.missing.is_empty() {
-        out.push_str(&format!("warning: {} entries missing from the library\n", composed.missing.len()));
+        out.push_str(&format!(
+            "warning: {} entries missing from the library\n",
+            composed.missing.len()
+        ));
     }
     out
 }
@@ -95,7 +119,13 @@ mod tests {
     use std::path::PathBuf;
 
     fn entry(kind: Kind, name: &str, desc: Option<&str>, size: u64) -> Entry {
-        Entry { kind, name: name.into(), description: desc.map(String::from), path: PathBuf::from("/x"), size_bytes: size }
+        Entry {
+            kind,
+            name: name.into(),
+            description: desc.map(String::from),
+            path: PathBuf::from("/x"),
+            size_bytes: size,
+        }
     }
 
     fn library() -> Library {
@@ -121,7 +151,9 @@ mod tests {
 
     #[test]
     fn ls_empty_library_hints_next_step() {
-        assert!(render_ls(&Library::default(), &Config::default(), None).contains("bclaude import"));
+        assert!(
+            render_ls(&Library::default(), &Config::default(), None).contains("bclaude import")
+        );
     }
 
     #[test]
@@ -136,12 +168,19 @@ mod tests {
     #[test]
     fn which_lists_profiles_tokens_and_missing() {
         let resolved = Resolved {
-            activations: vec![crate::resolve::Activation { profile: "global".into(), reason: "always".into() }],
+            activations: vec![crate::resolve::Activation {
+                profile: "global".into(),
+                reason: "always".into(),
+            }],
             skills: vec!["handoff".into(), "ghost".into()],
             agents: vec![],
             claude_md: vec![],
         };
-        let composed = Composed { plugin_dir: None, claude_md: None, missing: vec![(Kind::Skill, "ghost".into())] };
+        let composed = Composed {
+            plugin_dir: None,
+            claude_md: None,
+            missing: vec![(Kind::Skill, "ghost".into())],
+        };
         let out = render_which(Path::new("/w"), &resolved, &composed, &library());
         assert!(out.contains("global — always"));
         assert!(out.contains("handoff (~10 tok)"));
@@ -153,15 +192,31 @@ mod tests {
 
     #[test]
     fn which_without_profiles_says_none() {
-        let composed = Composed { plugin_dir: None, claude_md: None, missing: vec![] };
-        let out = render_which(Path::new("/w"), &Resolved::default(), &composed, &Library::default());
+        let composed = Composed {
+            plugin_dir: None,
+            claude_md: None,
+            missing: vec![],
+        };
+        let out = render_which(
+            Path::new("/w"),
+            &Resolved::default(),
+            &composed,
+            &Library::default(),
+        );
         assert!(out.contains("profiles:\n  (none)"));
         assert!(!out.contains("warning"));
     }
 
     #[test]
     fn missing_entries_finds_unknown_names() {
-        let resolved = Resolved { skills: vec!["handoff".into(), "ghost".into()], agents: vec!["rev".into()], ..Default::default() };
-        assert_eq!(missing_entries(&resolved, &library()), [(Kind::Skill, "ghost".to_string())]);
+        let resolved = Resolved {
+            skills: vec!["handoff".into(), "ghost".into()],
+            agents: vec!["rev".into()],
+            ..Default::default()
+        };
+        assert_eq!(
+            missing_entries(&resolved, &library()),
+            [(Kind::Skill, "ghost".to_string())]
+        );
     }
 }

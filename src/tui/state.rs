@@ -16,7 +16,13 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 5] = [Tab::Skills, Tab::Agents, Tab::ClaudeMd, Tab::Profiles, Tab::Sessions];
+    pub const ALL: [Tab; 5] = [
+        Tab::Skills,
+        Tab::Agents,
+        Tab::ClaudeMd,
+        Tab::Profiles,
+        Tab::Sessions,
+    ];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -83,10 +89,17 @@ impl App {
                 .of_kind(kind)
                 .map(|e| Row {
                     name: e.name.clone(),
-                    detail: e.description.clone().unwrap_or_else(|| "(no description)".into()),
+                    detail: e
+                        .description
+                        .clone()
+                        .unwrap_or_else(|| "(no description)".into()),
                     extra: {
                         let p = self.config.profiles_including(kind, &e.name);
-                        if p.is_empty() { "-".into() } else { p.join(",") }
+                        if p.is_empty() {
+                            "-".into()
+                        } else {
+                            p.join(",")
+                        }
                     },
                     member: self.config.is_member(&self.active_profile, kind, &e.name),
                 })
@@ -98,8 +111,17 @@ impl App {
                 .map(|name| {
                     let p = self.config.profiles.get(&name).cloned().unwrap_or_default();
                     Row {
-                        detail: if p.match_paths.is_empty() { "(always / manual)".into() } else { p.match_paths.join(", ") },
-                        extra: format!("{}s {}a {}m", p.skills.len(), p.agents.len(), p.claude_md.len()),
+                        detail: if p.match_paths.is_empty() {
+                            "(always / manual)".into()
+                        } else {
+                            p.match_paths.join(", ")
+                        },
+                        extra: format!(
+                            "{}s {}a {}m",
+                            p.skills.len(),
+                            p.agents.len(),
+                            p.claude_md.len()
+                        ),
                         member: name == self.active_profile,
                         name,
                     }
@@ -146,7 +168,10 @@ impl App {
 
     pub fn cycle_profile(&mut self) {
         let names = self.config.profile_names();
-        let pos = names.iter().position(|n| *n == self.active_profile).unwrap_or(0);
+        let pos = names
+            .iter()
+            .position(|n| *n == self.active_profile)
+            .unwrap_or(0);
         self.active_profile = names[(pos + 1) % names.len()].clone();
         self.status = format!("active profile: {}", self.active_profile);
     }
@@ -158,7 +183,10 @@ impl App {
             return;
         };
         let on = !row.member;
-        if self.config.set_membership(&self.active_profile, kind, &row.name, on) {
+        if self
+            .config
+            .set_membership(&self.active_profile, kind, &row.name, on)
+        {
             self.dirty = true;
             self.status = format!(
                 "{} {} {} `{}`",
@@ -182,7 +210,12 @@ impl App {
                 .map(|t| t.lines().take(40).collect::<Vec<_>>().join("\n"))
                 .unwrap_or_else(|| "(cannot read file)".into()),
             None if self.tab == Tab::Profiles => {
-                let p = self.config.profiles.get(&row.name).cloned().unwrap_or_default();
+                let p = self
+                    .config
+                    .profiles
+                    .get(&row.name)
+                    .cloned()
+                    .unwrap_or_default();
                 format!(
                     "skills: {}\nagents: {}\nclaude.md: {}\nmatch: {}",
                     p.skills.join(", "),
@@ -244,7 +277,12 @@ mod tests {
         let mut config = Config::default();
         config.set_membership("global", Kind::Skill, "a", true);
         config.set_membership("px", Kind::Skill, "a", true);
-        config.profiles.get_mut("px").unwrap().match_paths.push("~/px/*".into());
+        config
+            .profiles
+            .get_mut("px")
+            .unwrap()
+            .match_paths
+            .push("~/px/*".into());
         let sessions = vec![SessionRecord {
             pid: 5,
             cwd: "/w".into(),
@@ -264,8 +302,22 @@ mod tests {
         let a = app();
         let rows = a.rows();
         assert_eq!(rows.len(), 2);
-        assert_eq!((rows[0].name.as_str(), rows[0].member, rows[0].extra.as_str()), ("a", true, "global,px"));
-        assert_eq!((rows[1].member, rows[1].extra.as_str(), rows[1].detail.as_str()), (false, "-", "(no description)"));
+        assert_eq!(
+            (
+                rows[0].name.as_str(),
+                rows[0].member,
+                rows[0].extra.as_str()
+            ),
+            ("a", true, "global,px")
+        );
+        assert_eq!(
+            (
+                rows[1].member,
+                rows[1].extra.as_str(),
+                rows[1].detail.as_str()
+            ),
+            (false, "-", "(no description)")
+        );
     }
 
     #[test]

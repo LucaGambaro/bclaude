@@ -32,7 +32,10 @@ mod tests {
     #[test]
     fn missing_file_gives_default() {
         let dir = tempfile::tempdir().unwrap();
-        assert_eq!(load(&dir.path().join("nope.toml")).unwrap(), Config::default());
+        assert_eq!(
+            load(&dir.path().join("nope.toml")).unwrap(),
+            Config::default()
+        );
     }
 
     #[test]

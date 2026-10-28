@@ -1,7 +1,19 @@
 [package]
-name = "bc"
+name = "bclaude"
 version = "0.1.0"
 edition = "2024"
+description = "Compose Claude Code skills, agents and CLAUDE.md per project, at launch time"
+readme = "README.md"
+repository = "https://github.com/LucaGambaro/bclaude"
+homepage = "https://github.com/LucaGambaro/bclaude"
+license = "MIT OR Apache-2.0"
+authors = ["Luca Gambaro"]
+keywords = ["claude", "claude-code", "cli", "tui", "ai"]
+categories = ["command-line-utilities", "development-tools"]
+
+[lib]
+name = "bc"
+path = "src/lib.rs"
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }

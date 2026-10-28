@@ -80,7 +80,10 @@ mod tests {
         let p = Paths::new("/r".into(), "/h".into());
         assert_eq!(p.config_file(), PathBuf::from("/r/config.toml"));
         assert_eq!(p.kind_dir(Kind::Agent), PathBuf::from("/r/library/agents"));
-        assert_eq!(p.kind_dir(Kind::ClaudeMd), PathBuf::from("/r/library/claude-md"));
+        assert_eq!(
+            p.kind_dir(Kind::ClaudeMd),
+            PathBuf::from("/r/library/claude-md")
+        );
         assert_eq!(p.sessions_dir(), PathBuf::from("/r/sessions"));
         assert_eq!(p.run_dir(), PathBuf::from("/r/run"));
         assert_eq!(p.claude_dir(), PathBuf::from("/h/.claude"));

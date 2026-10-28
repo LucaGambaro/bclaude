@@ -61,7 +61,9 @@ fn scan_kind(dir: &Path, kind: Kind, out: &mut Vec<Entry>) -> Result<()> {
             continue;
         }
         let text = fs::read_to_string(&file).map_err(|e| BcError::io(&file, e))?;
-        let size_bytes = fs::metadata(&file).map_err(|e| BcError::io(&file, e))?.len();
+        let size_bytes = fs::metadata(&file)
+            .map_err(|e| BcError::io(&file, e))?
+            .len();
         out.push(Entry {
             kind,
             name,
@@ -74,11 +76,15 @@ fn scan_kind(dir: &Path, kind: Kind, out: &mut Vec<Entry>) -> Result<()> {
 }
 
 fn file_name(path: &Path) -> String {
-    path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 fn stem(path: &Path) -> String {
-    path.file_stem().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    path.file_stem()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -93,22 +99,37 @@ mod tests {
     #[test]
     fn missing_library_is_empty() {
         let dir = tempfile::tempdir().unwrap();
-        assert!(Library::scan(&dir.path().join("none")).unwrap().entries().is_empty());
+        assert!(
+            Library::scan(&dir.path().join("none"))
+                .unwrap()
+                .entries()
+                .is_empty()
+        );
     }
 
     #[test]
     fn scans_all_kinds_sorted_with_descriptions() {
         let dir = tempfile::tempdir().unwrap();
         let root = dir.path();
-        write(&root.join("skills/zeta/SKILL.md"), "---\ndescription: Z skill\n---\nbody");
+        write(
+            &root.join("skills/zeta/SKILL.md"),
+            "---\ndescription: Z skill\n---\nbody",
+        );
         write(&root.join("skills/alpha/SKILL.md"), "no frontmatter");
         write(&root.join("skills/empty/README.md"), "ignored: no SKILL.md");
-        write(&root.join("agents/rev.md"), "---\ndescription: reviews\n---\n");
+        write(
+            &root.join("agents/rev.md"),
+            "---\ndescription: reviews\n---\n",
+        );
         write(&root.join("agents/notes.txt"), "ignored");
         write(&root.join("claude-md/personal.md"), "# me");
 
         let lib = Library::scan(root).unwrap();
-        let names: Vec<_> = lib.entries().iter().map(|e| (e.kind, e.name.as_str())).collect();
+        let names: Vec<_> = lib
+            .entries()
+            .iter()
+            .map(|e| (e.kind, e.name.as_str()))
+            .collect();
         assert_eq!(
             names,
             [
@@ -118,7 +139,13 @@ mod tests {
                 (Kind::ClaudeMd, "personal"),
             ]
         );
-        assert_eq!(lib.find(Kind::Skill, "zeta").unwrap().description.as_deref(), Some("Z skill"));
+        assert_eq!(
+            lib.find(Kind::Skill, "zeta")
+                .unwrap()
+                .description
+                .as_deref(),
+            Some("Z skill")
+        );
         assert_eq!(lib.find(Kind::Skill, "alpha").unwrap().description, None);
         assert!(lib.find(Kind::Agent, "zeta").is_none());
         assert_eq!(lib.of_kind(Kind::Agent).count(), 1);

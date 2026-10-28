@@ -36,7 +36,9 @@ pub fn parse(text: &str) -> Frontmatter {
         let value = value.trim();
         let resolved = if value.starts_with('>') || value.starts_with('|') {
             let mut parts = Vec::new();
-            while i < body.len() && (body[i].starts_with(char::is_whitespace) || body[i].trim().is_empty()) {
+            while i < body.len()
+                && (body[i].starts_with(char::is_whitespace) || body[i].trim().is_empty())
+            {
                 if !body[i].trim().is_empty() {
                     parts.push(body[i].trim());
                 }
@@ -74,7 +76,10 @@ mod tests {
 
     #[test]
     fn single_quotes_are_stripped() {
-        assert_eq!(parse("---\ndescription: 'hi'\n---").description.as_deref(), Some("hi"));
+        assert_eq!(
+            parse("---\ndescription: 'hi'\n---").description.as_deref(),
+            Some("hi")
+        );
     }
 
     #[test]

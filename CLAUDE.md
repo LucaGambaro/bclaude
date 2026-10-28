@@ -1,6 +1,6 @@
 # betterClaude
 
-Rust crate (lib + thin `main.rs`). See README.md for behaviour and config format.
+Rust crate `bclaude` (lib `bc` + thin `main.rs`, binary `bclaude`). See README.md for behaviour and config format, `docs/profiles.md` for the profiles guide.
 
 ## Layout
 - `config/` schema (serde), load/save, membership edits · `library/` scan, frontmatter, add/import
@@ -14,4 +14,6 @@ Rust crate (lib + thin `main.rs`). See README.md for behaviour and config format
 - `cli`/`commands` only do I/O and delegate; no business logic there.
 - Errors propagate as `BcError`; print once in `main`. No log + return in the same place.
 - No `unsafe`, no env mutation in tests (use `BC_HOME`-style injected `Paths`).
-- Keep README.md and this file in sync with any change.
+- Keep README.md, `docs/`, CHANGELOG.md (`Unreleased`) and this file in sync with any change.
+- Before a PR: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (same as CI in `.github/workflows/ci.yml`).
+- Community files (CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, LICENSE-MIT/APACHE) live at the repo root; license is `MIT OR Apache-2.0`.

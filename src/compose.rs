@@ -54,7 +54,8 @@ pub fn compose(resolved: &Resolved, library: &Library, session_dir: &Path) -> Re
     for name in &resolved.claude_md {
         match library.find(Kind::ClaudeMd, name) {
             Some(entry) => {
-                let text = fs::read_to_string(&entry.path).map_err(|e| BcError::io(&entry.path, e))?;
+                let text =
+                    fs::read_to_string(&entry.path).map_err(|e| BcError::io(&entry.path, e))?;
                 sections.push(format!("<!-- bc: {name} -->\n{}\n", text.trim_end()));
             }
             None => missing.push((Kind::ClaudeMd, name.clone())),
@@ -103,7 +104,12 @@ mod tests {
 
     fn resolved(skills: &[&str], agents: &[&str], md: &[&str]) -> Resolved {
         let own = |v: &[&str]| v.iter().map(|s| s.to_string()).collect();
-        Resolved { activations: vec![], skills: own(skills), agents: own(agents), claude_md: own(md) }
+        Resolved {
+            activations: vec![],
+            skills: own(skills),
+            agents: own(agents),
+            claude_md: own(md),
+        }
     }
 
     #[test]
@@ -113,9 +119,19 @@ mod tests {
         let session = dir.path().join("run/1");
         let c = compose(&resolved(&["s1"], &["a1"], &[]), &lib, &session).unwrap();
         let plugin = c.plugin_dir.unwrap();
-        assert_eq!(fs::read_to_string(plugin.join("skills/s1/SKILL.md")).unwrap(), "skill one");
-        assert_eq!(fs::read_to_string(plugin.join("agents/a1.md")).unwrap(), "agent one");
-        assert!(fs::read_to_string(plugin.join(".claude-plugin/plugin.json")).unwrap().contains("\"bc\""));
+        assert_eq!(
+            fs::read_to_string(plugin.join("skills/s1/SKILL.md")).unwrap(),
+            "skill one"
+        );
+        assert_eq!(
+            fs::read_to_string(plugin.join("agents/a1.md")).unwrap(),
+            "agent one"
+        );
+        assert!(
+            fs::read_to_string(plugin.join(".claude-plugin/plugin.json"))
+                .unwrap()
+                .contains("\"bc\"")
+        );
         assert!(c.claude_md.is_none());
         assert!(c.missing.is_empty());
     }
@@ -124,7 +140,12 @@ mod tests {
     fn concatenates_claude_md_in_order_with_headers() {
         let dir = tempfile::tempdir().unwrap();
         let lib = library(&dir.path().join("lib"));
-        let c = compose(&resolved(&[], &[], &["m2", "m1"]), &lib, &dir.path().join("s")).unwrap();
+        let c = compose(
+            &resolved(&[], &[], &["m2", "m1"]),
+            &lib,
+            &dir.path().join("s"),
+        )
+        .unwrap();
         assert!(c.plugin_dir.is_none());
         let text = fs::read_to_string(c.claude_md.unwrap()).unwrap();
         assert_eq!(text, "<!-- bc: m2 -->\nsecond\n\n<!-- bc: m1 -->\nfirst\n");
@@ -134,10 +155,19 @@ mod tests {
     fn reports_missing_entries_without_failing() {
         let dir = tempfile::tempdir().unwrap();
         let lib = library(&dir.path().join("lib"));
-        let c = compose(&resolved(&["ghost"], &["a1", "nope"], &["zzz"]), &lib, &dir.path().join("s")).unwrap();
+        let c = compose(
+            &resolved(&["ghost"], &["a1", "nope"], &["zzz"]),
+            &lib,
+            &dir.path().join("s"),
+        )
+        .unwrap();
         assert_eq!(
             c.missing,
-            [(Kind::Skill, "ghost".into()), (Kind::Agent, "nope".into()), (Kind::ClaudeMd, "zzz".into())]
+            [
+                (Kind::Skill, "ghost".into()),
+                (Kind::Agent, "nope".into()),
+                (Kind::ClaudeMd, "zzz".into())
+            ]
         );
         assert!(c.plugin_dir.is_some());
         assert!(c.claude_md.is_none());
@@ -148,7 +178,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let session = dir.path().join("s");
         let c = compose(&Resolved::default(), &Library::default(), &session).unwrap();
-        assert_eq!(c, Composed { plugin_dir: None, claude_md: None, missing: vec![] });
+        assert_eq!(
+            c,
+            Composed {
+                plugin_dir: None,
+                claude_md: None,
+                missing: vec![]
+            }
+        );
         assert!(!session.exists());
     }
 
@@ -159,7 +196,16 @@ mod tests {
         let session = dir.path().join("s");
         let r = resolved(&["s1"], &[], &[]);
         compose(&r, &lib, &session).unwrap();
-        assert!(matches!(compose(&r, &lib, &session), Err(BcError::Io { .. })));
-        let _ = Entry { kind: Kind::Skill, name: String::new(), description: None, path: PathBuf::new(), size_bytes: 0 };
+        assert!(matches!(
+            compose(&r, &lib, &session),
+            Err(BcError::Io { .. })
+        ));
+        let _ = Entry {
+            kind: Kind::Skill,
+            name: String::new(),
+            description: None,
+            path: PathBuf::new(),
+            size_bytes: 0,
+        };
     }
 }

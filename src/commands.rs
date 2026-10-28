@@ -19,7 +19,8 @@ fn cwd() -> Result<std::path::PathBuf> {
 }
 
 fn emit(out: &mut impl Write, text: &str) -> Result<()> {
-    out.write_all(text.as_bytes()).map_err(|e| BcError::io("stdout", e))
+    out.write_all(text.as_bytes())
+        .map_err(|e| BcError::io("stdout", e))
 }
 
 /// Default action: run `claude` with the composed config (or just print the command).
@@ -27,7 +28,13 @@ pub fn run(dry_run: bool, args: &[String]) -> Result<i32> {
     let paths = Paths::from_env()?;
     let cwd = cwd()?;
     if dry_run {
-        return dry_run_report(&paths, &cwd, args, &mut std::io::stdout(), &mut std::io::stderr());
+        return dry_run_report(
+            &paths,
+            &cwd,
+            args,
+            &mut std::io::stdout(),
+            &mut std::io::stderr(),
+        );
     }
     runner::run_session(&paths, &cwd, args, &launch::claude_bin())
 }
@@ -40,9 +47,21 @@ fn dry_run_report(
     err: &mut impl Write,
 ) -> Result<i32> {
     let prepared = runner::prepare(paths, cwd, std::process::id(), args)?;
-    emit(out, &format!("{}\n", launch::render_command(&launch::claude_bin(), &prepared.args)))?;
+    emit(
+        out,
+        &format!(
+            "{}\n",
+            launch::render_command(&launch::claude_bin(), &prepared.args)
+        ),
+    )?;
     for (kind, name) in &prepared.composed.missing {
-        emit(err, &format!("bclaude: warning: {} `{name}` not found in library\n", kind.label()))?;
+        emit(
+            err,
+            &format!(
+                "bclaude: warning: {} `{name}` not found in library\n",
+                kind.label()
+            ),
+        )?;
     }
     // the dry run only previews: don't leave the generated session behind
     fs::remove_dir_all(&prepared.session_dir).map_err(|e| BcError::io(&prepared.session_dir, e))?;
@@ -79,7 +98,10 @@ pub fn execute(command: Command, paths: &Paths, cwd: &Path, out: &mut impl Write
         }
         Command::Add { kind, path, name } => {
             let added = library::import::add(paths, kind, &path, name.as_deref())?;
-            emit(out, &format!("added {} `{added}` to the library\n", kind.label()))?;
+            emit(
+                out,
+                &format!("added {} `{added}` to the library\n", kind.label()),
+            )?;
         }
         Command::Import => {
             let imported = library::import::import_from_claude(paths)?;
@@ -91,7 +113,9 @@ pub fn execute(command: Command, paths: &Paths, cwd: &Path, out: &mut impl Write
             }
         }
         Command::Dash => {
-            return Err(BcError::Invalid("`dash` is interactive and cannot run here".into()));
+            return Err(BcError::Invalid(
+                "`dash` is interactive and cannot run here".into(),
+            ));
         }
     }
     Ok(0)
@@ -121,8 +145,14 @@ mod tests {
     #[test]
     fn import_then_ls_then_which() {
         let (_d, paths) = setup();
-        write(&paths.claude_dir().join("skills/s/SKILL.md"), "---\ndescription: does s\n---\n");
-        write(&paths.config_file(), "[profiles.global]\nskills=[\"s\",\"ghost\"]\n");
+        write(
+            &paths.claude_dir().join("skills/s/SKILL.md"),
+            "---\ndescription: does s\n---\n",
+        );
+        write(
+            &paths.config_file(),
+            "[profiles.global]\nskills=[\"s\",\"ghost\"]\n",
+        );
 
         let mut out = Vec::new();
         execute(Command::Import, &paths, Path::new("/w"), &mut out).unwrap();
@@ -133,7 +163,15 @@ mod tests {
         assert_eq!(text(out), "nothing new to import\n");
 
         let mut out = Vec::new();
-        execute(Command::Ls { kind: Some(Kind::Skill) }, &paths, Path::new("/w"), &mut out).unwrap();
+        execute(
+            Command::Ls {
+                kind: Some(Kind::Skill),
+            },
+            &paths,
+            Path::new("/w"),
+            &mut out,
+        )
+        .unwrap();
         let ls = text(out);
         assert!(ls.contains("does s") && ls.contains("global"));
 
@@ -149,10 +187,18 @@ mod tests {
         let f = d.path().join("a.md");
         write(&f, "x");
         let mut out = Vec::new();
-        let cmd = Command::Add { kind: Kind::Agent, path: f, name: None };
+        let cmd = Command::Add {
+            kind: Kind::Agent,
+            path: f,
+            name: None,
+        };
         execute(cmd, &paths, Path::new("/w"), &mut out).unwrap();
         assert_eq!(text(out), "added agent `a` to the library\n");
-        let bad = Command::Add { kind: Kind::Agent, path: d.path().join("nope.md"), name: None };
+        let bad = Command::Add {
+            kind: Kind::Agent,
+            path: d.path().join("nope.md"),
+            name: None,
+        };
         assert!(execute(bad, &paths, Path::new("/w"), &mut Vec::new()).is_err());
     }
 
@@ -165,16 +211,27 @@ mod tests {
     #[test]
     fn dry_run_prints_command_and_warns_about_missing() {
         let (_d, paths) = setup();
-        write(&paths.config_file(), "[profiles.global]\nagents=[\"gone\"]\nclaude_md=[\"m\"]\n");
+        write(
+            &paths.config_file(),
+            "[profiles.global]\nagents=[\"gone\"]\nclaude_md=[\"m\"]\n",
+        );
         write(&paths.kind_dir(Kind::ClaudeMd).join("m.md"), "hi");
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let args = vec!["-c".to_string()];
-        assert_eq!(dry_run_report(&paths, Path::new("/w"), &args, &mut out, &mut err).unwrap(), 0);
+        assert_eq!(
+            dry_run_report(&paths, Path::new("/w"), &args, &mut out, &mut err).unwrap(),
+            0
+        );
         let line = text(out);
         assert!(line.starts_with("claude --append-system-prompt-file "));
         assert!(line.trim_end().ends_with(" -c"));
         assert!(text(err).contains("agent `gone` not found"));
-        assert!(!paths.run_dir().join(std::process::id().to_string()).exists());
+        assert!(
+            !paths
+                .run_dir()
+                .join(std::process::id().to_string())
+                .exists()
+        );
     }
 
     #[test]

@@ -9,7 +9,10 @@ use crate::types::Kind;
 const BUILTINS: [&str; 6] = ["ls", "which", "add", "import", "dash", "help"];
 
 #[derive(Debug, Parser)]
-#[command(name = "bclaude", about = "betterClaude: compose skills, agents and CLAUDE.md per project on top of `claude`")]
+#[command(
+    name = "bclaude",
+    about = "betterClaude: compose skills, agents and CLAUDE.md per project on top of `claude`"
+)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -42,15 +45,26 @@ pub enum Command {
 pub enum Route {
     Builtin(Vec<String>),
     /// Launch claude with the composed config; remaining args go to claude untouched.
-    Run { dry_run: bool, args: Vec<String> },
+    Run {
+        dry_run: bool,
+        args: Vec<String>,
+    },
 }
 
 /// `bc <builtin> ...` is handled here; anything else is forwarded to claude.
 pub fn route(args: Vec<String>) -> Route {
     match args.first().map(String::as_str) {
-        Some(first) if BUILTINS.contains(&first) || first == "--help" || first == "-h" => Route::Builtin(args),
-        Some("--dry-run") => Route::Run { dry_run: true, args: args[1..].to_vec() },
-        _ => Route::Run { dry_run: false, args },
+        Some(first) if BUILTINS.contains(&first) || first == "--help" || first == "-h" => {
+            Route::Builtin(args)
+        }
+        Some("--dry-run") => Route::Run {
+            dry_run: true,
+            args: args[1..].to_vec(),
+        },
+        _ => Route::Run {
+            dry_run: false,
+            args,
+        },
     }
 }
 
@@ -81,30 +95,72 @@ mod tests {
 
     #[test]
     fn builtins_are_routed_to_clap() {
-        assert_eq!(route(v(&["ls", "--kind", "skill"])), Route::Builtin(v(&["ls", "--kind", "skill"])));
+        assert_eq!(
+            route(v(&["ls", "--kind", "skill"])),
+            Route::Builtin(v(&["ls", "--kind", "skill"]))
+        );
         assert_eq!(route(v(&["--help"])), Route::Builtin(v(&["--help"])));
         assert_eq!(route(v(&["dash"])), Route::Builtin(v(&["dash"])));
     }
 
     #[test]
     fn everything_else_goes_to_claude() {
-        assert_eq!(route(v(&[])), Route::Run { dry_run: false, args: vec![] });
-        assert_eq!(route(v(&["-c", "--model", "x"])), Route::Run { dry_run: false, args: v(&["-c", "--model", "x"]) });
-        assert_eq!(route(v(&["fix the bug"])), Route::Run { dry_run: false, args: v(&["fix the bug"]) });
+        assert_eq!(
+            route(v(&[])),
+            Route::Run {
+                dry_run: false,
+                args: vec![]
+            }
+        );
+        assert_eq!(
+            route(v(&["-c", "--model", "x"])),
+            Route::Run {
+                dry_run: false,
+                args: v(&["-c", "--model", "x"])
+            }
+        );
+        assert_eq!(
+            route(v(&["fix the bug"])),
+            Route::Run {
+                dry_run: false,
+                args: v(&["fix the bug"])
+            }
+        );
     }
 
     #[test]
     fn dry_run_flag_is_consumed() {
-        assert_eq!(route(v(&["--dry-run", "-p", "hi"])), Route::Run { dry_run: true, args: v(&["-p", "hi"]) });
+        assert_eq!(
+            route(v(&["--dry-run", "-p", "hi"])),
+            Route::Run {
+                dry_run: true,
+                args: v(&["-p", "hi"])
+            }
+        );
     }
 
     #[test]
     fn clap_parses_subcommands() {
         let ls = Cli::try_parse_from(["bclaude", "ls", "--kind", "md"]).unwrap();
-        assert_eq!(ls.command, Command::Ls { kind: Some(Kind::ClaudeMd) });
+        assert_eq!(
+            ls.command,
+            Command::Ls {
+                kind: Some(Kind::ClaudeMd)
+            }
+        );
         let add = Cli::try_parse_from(["bclaude", "add", "skill", "/p", "--name", "n"]).unwrap();
-        assert_eq!(add.command, Command::Add { kind: Kind::Skill, path: "/p".into(), name: Some("n".into()) });
-        assert_eq!(Cli::try_parse_from(["bclaude", "which"]).unwrap().command, Command::Which);
+        assert_eq!(
+            add.command,
+            Command::Add {
+                kind: Kind::Skill,
+                path: "/p".into(),
+                name: Some("n".into())
+            }
+        );
+        assert_eq!(
+            Cli::try_parse_from(["bclaude", "which"]).unwrap().command,
+            Command::Which
+        );
         assert!(Cli::try_parse_from(["bclaude", "add", "bogus", "/p"]).is_err());
     }
 }

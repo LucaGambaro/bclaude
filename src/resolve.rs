@@ -66,7 +66,10 @@ pub fn resolve(config: &Config, cwd: &Path, home: &Path) -> Resolved {
     let mut resolved = Resolved::default();
     let activate = |resolved: &mut Resolved, profile: &str, reason: String| {
         if !resolved.activations.iter().any(|a| a.profile == profile) {
-            resolved.activations.push(Activation { profile: profile.to_string(), reason });
+            resolved.activations.push(Activation {
+                profile: profile.to_string(),
+                reason,
+            });
         }
     };
 
@@ -77,7 +80,11 @@ pub fn resolve(config: &Config, cwd: &Path, home: &Path) -> Resolved {
         if name == GLOBAL_PROFILE {
             continue;
         }
-        if let Some(pat) = profile.match_paths.iter().find(|p| pattern_matches(p, cwd, home)) {
+        if let Some(pat) = profile
+            .match_paths
+            .iter()
+            .find(|p| pattern_matches(p, cwd, home))
+        {
             activate(&mut resolved, name, format!("match {pat}"));
         }
     }
@@ -179,10 +186,13 @@ skills = ["only-solo"]
     #[test]
     fn project_override_does_not_duplicate_matching_profile() {
         let mut cfg = config();
-        cfg.projects.insert("~/work/px/repo".into(), crate::config::ProjectOverride {
-            profiles: vec!["px".into()],
-            ..Default::default()
-        });
+        cfg.projects.insert(
+            "~/work/px/repo".into(),
+            crate::config::ProjectOverride {
+                profiles: vec!["px".into()],
+                ..Default::default()
+            },
+        );
         let r = resolve(&cfg, Path::new("/h/work/px/repo"), &home());
         assert_eq!(r.profile_names(), ["global", "px"]);
         assert_eq!(r.activations[1].reason, "match ~/work/px/*");
@@ -190,12 +200,18 @@ skills = ["only-solo"]
 
     #[test]
     fn empty_config_resolves_to_nothing_and_unknown_profile_is_ignored() {
-        assert_eq!(resolve(&Config::default(), Path::new("/x"), &home()), Resolved::default());
+        assert_eq!(
+            resolve(&Config::default(), Path::new("/x"), &home()),
+            Resolved::default()
+        );
         let mut cfg = Config::default();
-        cfg.projects.insert("/x".into(), crate::config::ProjectOverride {
-            profiles: vec!["ghost".into()],
-            ..Default::default()
-        });
+        cfg.projects.insert(
+            "/x".into(),
+            crate::config::ProjectOverride {
+                profiles: vec!["ghost".into()],
+                ..Default::default()
+            },
+        );
         let r = resolve(&cfg, Path::new("/x"), &home());
         assert_eq!(r.profile_names(), ["ghost"]);
         assert!(r.skills.is_empty());

@@ -18,7 +18,9 @@ pub fn copy_recursive(from: &Path, to: &Path) -> Result<()> {
         if let Some(parent) = to.parent() {
             fs::create_dir_all(parent).map_err(|e| BcError::io(parent, e))?;
         }
-        fs::copy(from, to).map(|_| ()).map_err(|e| BcError::io(to, e))
+        fs::copy(from, to)
+            .map(|_| ())
+            .map_err(|e| BcError::io(to, e))
     }
 }
 
@@ -30,7 +32,9 @@ pub fn add(paths: &Paths, kind: Kind, source: &Path, name: Option<&str>) -> Resu
     match kind {
         Kind::Skill => {
             let skill_dir = if source.is_file() {
-                source.parent().ok_or_else(|| invalid(format!("no parent for {}", source.display())))?
+                source
+                    .parent()
+                    .ok_or_else(|| invalid(format!("no parent for {}", source.display())))?
             } else {
                 source
             };
@@ -39,7 +43,11 @@ pub fn add(paths: &Paths, kind: Kind, source: &Path, name: Option<&str>) -> Resu
             }
             let name = name
                 .map(str::to_string)
-                .or_else(|| skill_dir.file_name().map(|n| n.to_string_lossy().into_owned()))
+                .or_else(|| {
+                    skill_dir
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                })
                 .ok_or_else(|| invalid("cannot infer skill name".into()))?;
             copy_recursive(skill_dir, &dir.join(&name))?;
             Ok(name)
@@ -121,8 +129,16 @@ mod tests {
         write(&src.join("SKILL.md"), "x");
         write(&src.join("refs/a.txt"), "y");
         assert_eq!(add(&paths, Kind::Skill, &src, None).unwrap(), "my-skill");
-        assert!(paths.kind_dir(Kind::Skill).join("my-skill/refs/a.txt").is_file());
-        assert_eq!(add(&paths, Kind::Skill, &src.join("SKILL.md"), Some("other")).unwrap(), "other");
+        assert!(
+            paths
+                .kind_dir(Kind::Skill)
+                .join("my-skill/refs/a.txt")
+                .is_file()
+        );
+        assert_eq!(
+            add(&paths, Kind::Skill, &src.join("SKILL.md"), Some("other")).unwrap(),
+            "other"
+        );
         assert!(paths.kind_dir(Kind::Skill).join("other/SKILL.md").is_file());
     }
 
@@ -131,11 +147,20 @@ mod tests {
         let (dir, paths) = setup();
         let empty = dir.path().join("empty");
         fs::create_dir_all(&empty).unwrap();
-        assert!(matches!(add(&paths, Kind::Skill, &empty, None), Err(BcError::Invalid(_))));
+        assert!(matches!(
+            add(&paths, Kind::Skill, &empty, None),
+            Err(BcError::Invalid(_))
+        ));
         let txt = dir.path().join("a.txt");
         write(&txt, "x");
-        assert!(matches!(add(&paths, Kind::Agent, &txt, None), Err(BcError::Invalid(_))));
-        assert!(matches!(add(&paths, Kind::ClaudeMd, &dir.path().join("missing.md"), None), Err(BcError::Invalid(_))));
+        assert!(matches!(
+            add(&paths, Kind::Agent, &txt, None),
+            Err(BcError::Invalid(_))
+        ));
+        assert!(matches!(
+            add(&paths, Kind::ClaudeMd, &dir.path().join("missing.md"), None),
+            Err(BcError::Invalid(_))
+        ));
     }
 
     #[test]
@@ -144,7 +169,10 @@ mod tests {
         let f = dir.path().join("rev.md");
         write(&f, "x");
         assert_eq!(add(&paths, Kind::Agent, &f, None).unwrap(), "rev");
-        assert_eq!(add(&paths, Kind::ClaudeMd, &f, Some("shared")).unwrap(), "shared");
+        assert_eq!(
+            add(&paths, Kind::ClaudeMd, &f, Some("shared")).unwrap(),
+            "shared"
+        );
         assert!(paths.kind_dir(Kind::Agent).join("rev.md").is_file());
         assert!(paths.kind_dir(Kind::ClaudeMd).join("shared.md").is_file());
     }
@@ -160,8 +188,17 @@ mod tests {
         write(&paths.kind_dir(Kind::Agent).join("a2.md"), "already");
 
         let done = import_from_claude(&paths).unwrap();
-        assert_eq!(done, [(Kind::Skill, "s1".to_string()), (Kind::Agent, "a1".to_string())]);
-        assert_eq!(fs::read_to_string(paths.kind_dir(Kind::Agent).join("a2.md")).unwrap(), "already");
+        assert_eq!(
+            done,
+            [
+                (Kind::Skill, "s1".to_string()),
+                (Kind::Agent, "a1".to_string())
+            ]
+        );
+        assert_eq!(
+            fs::read_to_string(paths.kind_dir(Kind::Agent).join("a2.md")).unwrap(),
+            "already"
+        );
         assert!(import_from_claude(&paths).unwrap().is_empty());
     }
 
