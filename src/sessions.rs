@@ -15,6 +15,10 @@ pub struct SessionRecord {
     pub skills: Vec<String>,
     pub agents: Vec<String>,
     pub claude_md: Vec<String>,
+    #[serde(default)]
+    pub plugins: Vec<String>,
+    #[serde(default)]
+    pub mcp: Vec<String>,
     pub started_unix: u64,
 }
 
@@ -99,6 +103,8 @@ mod tests {
             skills: vec!["s".into()],
             agents: vec![],
             claude_md: vec![],
+            plugins: vec![],
+            mcp: vec![],
             started_unix: started,
         }
     }

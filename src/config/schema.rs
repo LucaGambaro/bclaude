@@ -24,6 +24,12 @@ pub struct Profile {
     pub agents: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub claude_md: Vec<String>,
+    /// Installed plugin ids (`name@marketplace`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugins: Vec<String>,
+    /// MCP server names from the library.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp: Vec<String>,
     /// Glob patterns of repo paths this profile applies to.
     #[serde(default, rename = "match", skip_serializing_if = "Vec::is_empty")]
     pub match_paths: Vec<String>,
@@ -39,6 +45,12 @@ pub struct ProjectOverride {
     pub agents: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub claude_md: Vec<String>,
+    /// Installed plugin ids (`name@marketplace`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plugins: Vec<String>,
+    /// MCP server names from the library.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mcp: Vec<String>,
 }
 
 impl Profile {
@@ -47,6 +59,8 @@ impl Profile {
             Kind::Skill => &self.skills,
             Kind::Agent => &self.agents,
             Kind::ClaudeMd => &self.claude_md,
+            Kind::Plugin => &self.plugins,
+            Kind::Mcp => &self.mcp,
         }
     }
 
@@ -55,6 +69,8 @@ impl Profile {
             Kind::Skill => &mut self.skills,
             Kind::Agent => &mut self.agents,
             Kind::ClaudeMd => &mut self.claude_md,
+            Kind::Plugin => &mut self.plugins,
+            Kind::Mcp => &mut self.mcp,
         }
     }
 }
@@ -65,6 +81,8 @@ impl ProjectOverride {
             Kind::Skill => &self.skills,
             Kind::Agent => &self.agents,
             Kind::ClaudeMd => &self.claude_md,
+            Kind::Plugin => &self.plugins,
+            Kind::Mcp => &self.mcp,
         }
     }
 }
@@ -83,17 +101,25 @@ skills = ["a"]
 description = "acme"
 agents = ["x"]
 claude_md = ["m"]
+plugins = ["p@mk"]
+mcp = ["m1"]
 match = ["~/w/*"]
 [projects."~/w/foo"]
 profiles = ["px"]
 skills = ["extra"]
+plugins = ["o@mk"]
+mcp = ["m2"]
 "#,
         )
         .unwrap();
         assert_eq!(cfg.profiles["global"].skills, ["a"]);
+        assert_eq!(cfg.profiles["px"].plugins, ["p@mk"]);
+        assert_eq!(cfg.profiles["px"].mcp, ["m1"]);
         assert_eq!(cfg.profiles["px"].match_paths, ["~/w/*"]);
         assert_eq!(cfg.profiles["px"].description.as_deref(), Some("acme"));
         assert_eq!(cfg.projects["~/w/foo"].list(Kind::Skill), &["extra"]);
+        assert_eq!(cfg.projects["~/w/foo"].list(Kind::Plugin), &["o@mk"]);
+        assert_eq!(cfg.projects["~/w/foo"].list(Kind::Mcp), &["m2"]);
         assert!(cfg.projects["~/w/foo"].list(Kind::Agent).is_empty());
     }
 

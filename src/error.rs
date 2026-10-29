@@ -18,6 +18,18 @@ pub enum BcError {
     },
     #[error("cannot serialize config: {0}")]
     ConfigSerialize(#[from] toml::ser::Error),
+    #[error("invalid plugin registry {path}: {source}")]
+    InstalledPlugins {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
+    #[error("invalid MCP server JSON {path}: {source}")]
+    McpJson {
+        path: PathBuf,
+        #[source]
+        source: serde_json::Error,
+    },
     #[error("cannot serialize session: {0}")]
     SessionSerialize(#[from] serde_json::Error),
     #[error("HOME is not set (and BC_HOME is not provided)")]

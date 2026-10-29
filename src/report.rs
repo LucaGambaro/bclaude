@@ -38,7 +38,7 @@ pub fn render_ls(library: &Library, config: &Config, kind: Option<Kind>) -> Stri
         .max(4);
     let mut out = format!(
         "{} {} {} DESCRIPTION\n",
-        pad("KIND", 5),
+        pad("KIND", 6),
         pad("NAME", name_w),
         pad("PROFILES", 18)
     );
@@ -51,7 +51,7 @@ pub fn render_ls(library: &Library, config: &Config, kind: Option<Kind>) -> Stri
         };
         out.push_str(&format!(
             "{} {} {} {}\n",
-            pad(e.kind.label(), 5),
+            pad(e.kind.label(), 6),
             pad(&e.name, name_w),
             pad(&one_line(&profiles, 18), 18),
             one_line(e.description.as_deref().unwrap_or("(no description)"), 80),
@@ -83,6 +83,12 @@ pub fn render_which(
         }
         for name in names {
             match library.find(kind, name) {
+                Some(_) if kind == Kind::Plugin => {
+                    out.push_str(&format!("  {name} (installed plugin)\n"));
+                }
+                Some(_) if kind == Kind::Mcp => {
+                    out.push_str(&format!("  {name} (MCP server)\n"));
+                }
                 Some(e) => {
                     total += e.estimated_tokens();
                     out.push_str(&format!("  {name} (~{} tok)\n", e.estimated_tokens()));
@@ -132,6 +138,8 @@ mod tests {
         Library::from_entries(vec![
             entry(Kind::Skill, "handoff", Some("Hand\noff   notes"), 40),
             entry(Kind::Agent, "rev", None, 8),
+            entry(Kind::Plugin, "pl@mk", Some("A plugin"), 0),
+            entry(Kind::Mcp, "srv", Some("uvx srv"), 30),
         ])
     }
 
@@ -175,10 +183,14 @@ mod tests {
             skills: vec!["handoff".into(), "ghost".into()],
             agents: vec![],
             claude_md: vec![],
+            plugins: vec!["pl@mk".into(), "gone@mk".into()],
+            mcp: vec!["srv".into()],
         };
         let composed = Composed {
             plugin_dir: None,
             claude_md: None,
+            settings_file: None,
+            mcp_config: None,
             missing: vec![(Kind::Skill, "ghost".into())],
         };
         let out = render_which(Path::new("/w"), &resolved, &composed, &library());
@@ -188,6 +200,9 @@ mod tests {
         assert!(out.contains("~10 tokens"));
         assert!(out.contains("warning: 1 entries missing"));
         assert!(out.contains("agent:\n  (none)"));
+        assert!(out.contains("pl@mk (installed plugin)"));
+        assert!(out.contains("gone@mk (MISSING in library)"));
+        assert!(out.contains("srv (MCP server)"));
     }
 
     #[test]
@@ -195,6 +210,8 @@ mod tests {
         let composed = Composed {
             plugin_dir: None,
             claude_md: None,
+            settings_file: None,
+            mcp_config: None,
             missing: vec![],
         };
         let out = render_which(

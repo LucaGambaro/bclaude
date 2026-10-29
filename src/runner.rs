@@ -23,7 +23,7 @@ pub struct Prepared {
 /// Resolves the profile set for `cwd` and materialises it under `<run_dir>/<pid>`.
 pub fn prepare(paths: &Paths, cwd: &Path, pid: u32, user_args: &[String]) -> Result<Prepared> {
     let cfg = config::load(&paths.config_file())?;
-    let library = Library::scan(&paths.library_dir())?;
+    let library = Library::load(paths)?;
     let resolved = resolve(&cfg, cwd, &paths.home);
     let session_dir = paths.run_dir().join(pid.to_string());
     if session_dir.exists() {
@@ -47,6 +47,8 @@ pub fn record_for(prepared: &Prepared, cwd: &Path, pid: u32) -> SessionRecord {
         skills: prepared.resolved.skills.clone(),
         agents: prepared.resolved.agents.clone(),
         claude_md: prepared.resolved.claude_md.clone(),
+        plugins: prepared.resolved.plugins.clone(),
+        mcp: prepared.resolved.mcp.clone(),
         started_unix: sessions::now_unix(),
     }
 }

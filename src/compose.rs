@@ -4,7 +4,9 @@ use std::path::{Path, PathBuf};
 
 use crate::error::{BcError, Result};
 use crate::library::Library;
+use crate::mcp::{McpConfig, McpServerDef};
 use crate::resolve::Resolved;
+use crate::session_settings::SessionSettings;
 use crate::types::Kind;
 
 pub const PLUGIN_NAME: &str = "bc";
@@ -16,15 +18,40 @@ pub struct Composed {
     pub plugin_dir: Option<PathBuf>,
     /// Concatenated CLAUDE.md fragments; `None` when there are none.
     pub claude_md: Option<PathBuf>,
+    /// `--settings` file enabling only the selected plugins; `None` when none are selected.
+    pub settings_file: Option<PathBuf>,
+    /// `--mcp-config` file with only the selected MCP servers; `None` when none are selected.
+    pub mcp_config: Option<PathBuf>,
     /// Names referenced by the config but absent from the library.
     pub missing: Vec<(Kind, String)>,
 }
 
-/// Builds `<session_dir>/plugin` (symlinks into the library) and `<session_dir>/CLAUDE.md`.
+/// Builds `<session_dir>/plugin` (symlinks into the library), `<session_dir>/CLAUDE.md` and
+/// `<session_dir>/mcp.json` and `<session_dir>/settings.json` (installed plugins are enabled through settings, not linked).
 pub fn compose(resolved: &Resolved, library: &Library, session_dir: &Path) -> Result<Composed> {
     let mut missing = Vec::new();
     let plugin = session_dir.join("plugin");
     let mut has_plugin_content = false;
+
+    let mut selected_plugins = Vec::new();
+    for name in resolved.names(Kind::Plugin) {
+        match library.find(Kind::Plugin, name) {
+            Some(_) => selected_plugins.push(name.clone()),
+            None => missing.push((Kind::Plugin, name.clone())),
+        }
+    }
+
+    let mut mcp_config = McpConfig::default();
+    for name in resolved.names(Kind::Mcp) {
+        match library.find(Kind::Mcp, name) {
+            Some(entry) => {
+                mcp_config
+                    .mcp_servers
+                    .insert(name.clone(), McpServerDef::read(&entry.path)?);
+            }
+            None => missing.push((Kind::Mcp, name.clone())),
+        }
+    }
 
     for kind in [Kind::Skill, Kind::Agent] {
         for name in resolved.names(kind) {
@@ -70,9 +97,35 @@ pub fn compose(resolved: &Resolved, library: &Library, session_dir: &Path) -> Re
         Some(file)
     };
 
+    let settings_file = if selected_plugins.is_empty() {
+        None
+    } else {
+        let settings = SessionSettings::for_plugins(
+            &selected_plugins,
+            library.of_kind(Kind::Plugin).map(|e| e.name.as_str()),
+        );
+        let file = session_dir.join("settings.json");
+        fs::create_dir_all(session_dir).map_err(|e| BcError::io(session_dir, e))?;
+        fs::write(&file, serde_json::to_string_pretty(&settings)?)
+            .map_err(|e| BcError::io(&file, e))?;
+        Some(file)
+    };
+
+    let mcp_file = if mcp_config.mcp_servers.is_empty() {
+        None
+    } else {
+        let file = session_dir.join("mcp.json");
+        fs::create_dir_all(session_dir).map_err(|e| BcError::io(session_dir, e))?;
+        fs::write(&file, serde_json::to_string_pretty(&mcp_config)?)
+            .map_err(|e| BcError::io(&file, e))?;
+        Some(file)
+    };
+
     Ok(Composed {
         plugin_dir: has_plugin_content.then_some(plugin),
         claude_md,
+        settings_file,
+        mcp_config: mcp_file,
         missing,
     })
 }
@@ -109,6 +162,8 @@ mod tests {
             skills: own(skills),
             agents: own(agents),
             claude_md: own(md),
+            plugins: vec![],
+            mcp: vec![],
         }
     }
 
@@ -183,10 +238,97 @@ mod tests {
             Composed {
                 plugin_dir: None,
                 claude_md: None,
+                settings_file: None,
+                mcp_config: None,
                 missing: vec![]
             }
         );
         assert!(!session.exists());
+    }
+
+    fn plugin_entry(name: &str) -> Entry {
+        Entry {
+            kind: Kind::Plugin,
+            name: name.into(),
+            description: None,
+            path: PathBuf::from("/installed").join(name),
+            size_bytes: 0,
+        }
+    }
+
+    #[test]
+    fn selected_plugins_are_enabled_and_the_others_disabled() {
+        let dir = tempfile::tempdir().unwrap();
+        let lib = Library::from_entries(vec![plugin_entry("a@m"), plugin_entry("b@m")]);
+        let mut r = resolved(&[], &[], &[]);
+        r.plugins = vec!["a@m".into(), "ghost@m".into()];
+        let session = dir.path().join("s");
+        let c = compose(&r, &lib, &session).unwrap();
+        assert_eq!(c.settings_file, Some(session.join("settings.json")));
+        assert_eq!(
+            fs::read_to_string(session.join("settings.json"))
+                .unwrap()
+                .split_whitespace()
+                .collect::<String>(),
+            r#"{"enabledPlugins":{"a@m":true,"b@m":false}}"#
+        );
+        assert_eq!(c.missing, [(Kind::Plugin, "ghost@m".to_string())]);
+        assert!(c.plugin_dir.is_none());
+    }
+
+    #[test]
+    fn only_missing_plugins_write_no_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut r = resolved(&[], &[], &[]);
+        r.plugins = vec!["ghost@m".into()];
+        let session = dir.path().join("s");
+        let c = compose(&r, &Library::default(), &session).unwrap();
+        assert!(c.settings_file.is_none());
+        assert!(!session.exists());
+    }
+
+    #[test]
+    fn selected_mcp_servers_are_written_and_missing_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("lib");
+        write(
+            &root.join("mcp/srv.json"),
+            r#"{"command":"c","args":["a"]}"#,
+        );
+        let lib = Library::scan(&root).unwrap();
+        let mut r = resolved(&[], &[], &[]);
+        r.mcp = vec!["srv".into(), "ghost".into()];
+        let session = dir.path().join("s");
+        let c = compose(&r, &lib, &session).unwrap();
+        assert_eq!(c.mcp_config, Some(session.join("mcp.json")));
+        assert_eq!(
+            fs::read_to_string(session.join("mcp.json"))
+                .unwrap()
+                .split_whitespace()
+                .collect::<String>(),
+            r#"{"mcpServers":{"srv":{"args":["a"],"command":"c"}}}"#
+        );
+        assert_eq!(c.missing, [(Kind::Mcp, "ghost".to_string())]);
+    }
+
+    #[test]
+    fn invalid_mcp_definition_fails_the_session() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("lib");
+        write(&root.join("mcp/bad.json"), "[]");
+        let lib = Library::from_entries(vec![Entry {
+            kind: Kind::Mcp,
+            name: "bad".into(),
+            description: None,
+            path: root.join("mcp/bad.json"),
+            size_bytes: 2,
+        }]);
+        let mut r = resolved(&[], &[], &[]);
+        r.mcp = vec!["bad".into()];
+        assert!(matches!(
+            compose(&r, &lib, &dir.path().join("s")),
+            Err(BcError::McpJson { .. })
+        ));
     }
 
     #[test]

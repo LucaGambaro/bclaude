@@ -6,16 +6,26 @@ pub enum Kind {
     Agent,
     #[value(name = "md")]
     ClaudeMd,
+    Plugin,
+    Mcp,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 3] = [Kind::Skill, Kind::Agent, Kind::ClaudeMd];
+    pub const ALL: [Kind; 5] = [
+        Kind::Skill,
+        Kind::Agent,
+        Kind::ClaudeMd,
+        Kind::Plugin,
+        Kind::Mcp,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             Kind::Skill => "skill",
             Kind::Agent => "agent",
             Kind::ClaudeMd => "md",
+            Kind::Plugin => "plugin",
+            Kind::Mcp => "mcp",
         }
     }
 
@@ -25,6 +35,8 @@ impl Kind {
             Kind::Skill => "skills",
             Kind::Agent => "agents",
             Kind::ClaudeMd => "claude-md",
+            Kind::Plugin => "plugins",
+            Kind::Mcp => "mcp",
         }
     }
 }
@@ -37,7 +49,7 @@ mod tests {
     fn labels_and_subdirs_are_distinct() {
         let labels: Vec<_> = Kind::ALL.iter().map(|k| k.label()).collect();
         let dirs: Vec<_> = Kind::ALL.iter().map(|k| k.subdir()).collect();
-        assert_eq!(labels, ["skill", "agent", "md"]);
-        assert_eq!(dirs, ["skills", "agents", "claude-md"]);
+        assert_eq!(labels, ["skill", "agent", "md", "plugin", "mcp"]);
+        assert_eq!(dirs, ["skills", "agents", "claude-md", "plugins", "mcp"]);
     }
 }

@@ -3,9 +3,9 @@
 Rust crate `bclaude` (lib `bc` + thin `main.rs`, binary `bclaude`). See README.md for behaviour and config format, `docs/profiles.md` for the profiles guide.
 
 ## Layout
-- `config/` schema (serde), load/save, membership edits · `library/` scan, frontmatter, add/import
-- `resolve.rs` pure cwd → profiles/names · `compose.rs` per-session plugin + CLAUDE.md
-- `launch.rs` flags + spawn · `runner.rs` lifecycle (prepare, session record, cleanup)
+- `config/` schema (serde), load/save, membership edits · `library/` scan, frontmatter, add/import, installed plugins (read from `~/.claude/plugins`, never copied) · `mcp.rs` MCP server defs + session `--mcp-config`
+- `resolve.rs` pure cwd → profiles/names · `compose.rs` per-session plugin + CLAUDE.md + settings.json + mcp.json
+- `session_settings.rs` per-session `--settings` (enabledPlugins) · `launch.rs` flags + spawn · `runner.rs` lifecycle (prepare, session record, cleanup)
 - `sessions.rs` live session records · `report.rs` text rendering · `cli.rs` routing/clap · `commands.rs` I/O glue
 - `tui/` `state.rs` (pure), `ui.rs` (ratatui), `mod.rs` (key handling + loop)
 

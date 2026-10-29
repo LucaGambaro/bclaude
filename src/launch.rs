@@ -17,6 +17,15 @@ pub fn build_args(composed: &Composed, user_args: &[String]) -> Vec<OsString> {
         args.push("--plugin-dir".into());
         args.push(dir.clone().into_os_string());
     }
+    if let Some(file) = &composed.settings_file {
+        args.push("--settings".into());
+        args.push(file.clone().into_os_string());
+    }
+    if let Some(file) = &composed.mcp_config {
+        args.push("--mcp-config".into());
+        args.push(file.clone().into_os_string());
+        args.push("--strict-mcp-config".into());
+    }
     if let Some(file) = &composed.claude_md {
         args.push("--append-system-prompt-file".into());
         args.push(file.clone().into_os_string());
@@ -59,6 +68,8 @@ mod tests {
         Composed {
             plugin_dir: plugin.map(PathBuf::from),
             claude_md: md.map(PathBuf::from),
+            settings_file: None,
+            mcp_config: None,
             missing: vec![],
         }
     }
@@ -86,6 +97,33 @@ mod tests {
                 "--model",
                 "x"
             ]
+        );
+    }
+
+    #[test]
+    fn passes_settings_between_plugin_dir_and_claude_md() {
+        let mut c = composed(Some("/p"), Some("/m"));
+        c.settings_file = Some(PathBuf::from("/s.json"));
+        assert_eq!(
+            strs(&build_args(&c, &[])),
+            [
+                "--plugin-dir",
+                "/p",
+                "--settings",
+                "/s.json",
+                "--append-system-prompt-file",
+                "/m"
+            ]
+        );
+    }
+
+    #[test]
+    fn mcp_config_is_strict() {
+        let mut c = composed(None, None);
+        c.mcp_config = Some(PathBuf::from("/m.json"));
+        assert_eq!(
+            strs(&build_args(&c, &["-c".into()])),
+            ["--mcp-config", "/m.json", "--strict-mcp-config", "-c"]
         );
     }
 

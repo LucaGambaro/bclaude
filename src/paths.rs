@@ -45,6 +45,16 @@ impl Paths {
         self.root.join("run")
     }
 
+    /// Claude Code's registry of installed plugins (source for the plugin library).
+    pub fn installed_plugins_file(&self) -> PathBuf {
+        self.claude_dir().join("plugins/installed_plugins.json")
+    }
+
+    /// Claude Code's own state file, holding the user-scope MCP servers.
+    pub fn claude_json_file(&self) -> PathBuf {
+        self.home.join(".claude.json")
+    }
+
     /// Where the user's own Claude config lives (source for `bc import`).
     pub fn claude_dir(&self) -> PathBuf {
         self.home.join(".claude")
@@ -87,5 +97,11 @@ mod tests {
         assert_eq!(p.sessions_dir(), PathBuf::from("/r/sessions"));
         assert_eq!(p.run_dir(), PathBuf::from("/r/run"));
         assert_eq!(p.claude_dir(), PathBuf::from("/h/.claude"));
+        assert_eq!(p.claude_json_file(), PathBuf::from("/h/.claude.json"));
+        assert_eq!(p.kind_dir(Kind::Mcp), PathBuf::from("/r/library/mcp"));
+        assert_eq!(
+            p.installed_plugins_file(),
+            PathBuf::from("/h/.claude/plugins/installed_plugins.json")
+        );
     }
 }

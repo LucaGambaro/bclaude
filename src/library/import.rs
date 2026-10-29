@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 
 use crate::error::{BcError, Result};
+use crate::mcp::{self, McpServerDef};
 use crate::paths::Paths;
 use crate::types::Kind;
 
@@ -52,6 +53,21 @@ pub fn add(paths: &Paths, kind: Kind, source: &Path, name: Option<&str>) -> Resu
             copy_recursive(skill_dir, &dir.join(&name))?;
             Ok(name)
         }
+        Kind::Mcp => {
+            if !source.is_file() || source.extension().is_none_or(|e| e != "json") {
+                return Err(invalid(format!("{} is not a .json file", source.display())));
+            }
+            McpServerDef::read(source)?;
+            let name = name
+                .map(str::to_string)
+                .or_else(|| source.file_stem().map(|n| n.to_string_lossy().into_owned()))
+                .ok_or_else(|| invalid("cannot infer name".into()))?;
+            copy_recursive(source, &dir.join(format!("{name}.json")))?;
+            Ok(name)
+        }
+        Kind::Plugin => Err(invalid(
+            "plugins are not copied: install them with `claude plugin install`".into(),
+        )),
         Kind::Agent | Kind::ClaudeMd => {
             if !source.is_file() || source.extension().is_none_or(|e| e != "md") {
                 return Err(invalid(format!("{} is not a .md file", source.display())));
@@ -104,6 +120,27 @@ pub fn import_from_claude(paths: &Paths) -> Result<Vec<(Kind, String)>> {
             imported.push((kind, stem));
         }
     }
+    imported.extend(import_mcp_servers(paths)?);
+    Ok(imported)
+}
+
+/// Writes the user-scope MCP servers of `~/.claude.json` that are not yet in the library.
+fn import_mcp_servers(paths: &Paths) -> Result<Vec<(Kind, String)>> {
+    let dir = paths.kind_dir(Kind::Mcp);
+    let mut imported = Vec::new();
+    for (name, def) in mcp::registered_servers(&paths.claude_json_file())? {
+        let target = dir.join(format!("{name}.json"));
+        if target.exists() {
+            continue;
+        }
+        fs::create_dir_all(&dir).map_err(|e| BcError::io(&dir, e))?;
+        let json = serde_json::to_string_pretty(&def).map_err(|source| BcError::McpJson {
+            path: target.clone(),
+            source,
+        })?;
+        fs::write(&target, json).map_err(|e| BcError::io(&target, e))?;
+        imported.push((Kind::Mcp, name));
+    }
     Ok(imported)
 }
 
@@ -140,6 +177,54 @@ mod tests {
             "other"
         );
         assert!(paths.kind_dir(Kind::Skill).join("other/SKILL.md").is_file());
+    }
+
+    #[test]
+    fn adds_mcp_json_and_rejects_bad_sources() {
+        let (dir, paths) = setup();
+        let good = dir.path().join("srv.json");
+        write(&good, r#"{"command":"c"}"#);
+        assert_eq!(
+            add(&paths, Kind::Mcp, &good, Some("renamed")).unwrap(),
+            "renamed"
+        );
+        assert!(paths.kind_dir(Kind::Mcp).join("renamed.json").is_file());
+        assert_eq!(add(&paths, Kind::Mcp, &good, None).unwrap(), "srv");
+        let bad = dir.path().join("bad.json");
+        write(&bad, "[]");
+        assert!(matches!(
+            add(&paths, Kind::Mcp, &bad, None),
+            Err(BcError::McpJson { .. })
+        ));
+        let txt = dir.path().join("a.txt");
+        write(&txt, "{}");
+        assert!(matches!(
+            add(&paths, Kind::Mcp, &txt, None),
+            Err(BcError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn imports_user_mcp_servers_once() {
+        let (_dir, paths) = setup();
+        write(
+            &paths.claude_json_file(),
+            r#"{"mcpServers":{"serena":{"command":"uvx","args":["s"]}}}"#,
+        );
+        let first = import_from_claude(&paths).unwrap();
+        assert_eq!(first, [(Kind::Mcp, "serena".to_string())]);
+        let saved = McpServerDef::read(&paths.kind_dir(Kind::Mcp).join("serena.json")).unwrap();
+        assert_eq!(saved.summary().as_deref(), Some("uvx s"));
+        assert!(import_from_claude(&paths).unwrap().is_empty());
+    }
+
+    #[test]
+    fn plugins_cannot_be_added_by_copy() {
+        let (dir, paths) = setup();
+        assert!(matches!(
+            add(&paths, Kind::Plugin, dir.path(), None),
+            Err(BcError::Invalid(_))
+        ));
     }
 
     #[test]

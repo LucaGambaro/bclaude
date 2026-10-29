@@ -19,6 +19,8 @@ pub struct Resolved {
     pub skills: Vec<String>,
     pub agents: Vec<String>,
     pub claude_md: Vec<String>,
+    pub plugins: Vec<String>,
+    pub mcp: Vec<String>,
 }
 
 impl Resolved {
@@ -27,6 +29,8 @@ impl Resolved {
             Kind::Skill => &self.skills,
             Kind::Agent => &self.agents,
             Kind::ClaudeMd => &self.claude_md,
+            Kind::Plugin => &self.plugins,
+            Kind::Mcp => &self.mcp,
         }
     }
 
@@ -35,6 +39,8 @@ impl Resolved {
             Kind::Skill => &mut self.skills,
             Kind::Agent => &mut self.agents,
             Kind::ClaudeMd => &mut self.claude_md,
+            Kind::Plugin => &mut self.plugins,
+            Kind::Mcp => &mut self.mcp,
         }
     }
 
@@ -125,6 +131,8 @@ mod tests {
 [profiles.global]
 skills = ["g1"]
 claude_md = ["personal"]
+plugins = ["gp@mk"]
+mcp = ["gm"]
 [profiles.px]
 skills = ["p1", "g1"]
 agents = ["rev"]
@@ -150,6 +158,8 @@ skills = ["only-solo"]
         assert_eq!(r.profile_names(), ["global"]);
         assert_eq!(r.skills, ["g1"]);
         assert_eq!(r.claude_md, ["personal"]);
+        assert_eq!(r.plugins, ["gp@mk"]);
+        assert_eq!(r.mcp, ["gm"]);
         assert!(r.agents.is_empty());
     }
 

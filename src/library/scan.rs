@@ -3,7 +3,10 @@ use std::path::Path;
 
 use super::entry::Entry;
 use super::frontmatter;
+use super::plugins;
 use crate::error::{BcError, Result};
+use crate::mcp::McpServerDef;
+use crate::paths::Paths;
 use crate::types::Kind;
 
 #[derive(Clone, Debug, Default)]
@@ -17,7 +20,16 @@ impl Library {
         Self { entries }
     }
 
-    /// Scans `<library_dir>/{skills,agents,claude-md}`; missing dirs are empty.
+    /// The library dir plus the plugins installed in Claude Code.
+    pub fn load(paths: &Paths) -> Result<Self> {
+        let mut library = Self::scan(&paths.library_dir())?;
+        library
+            .entries
+            .extend(plugins::scan(&paths.installed_plugins_file())?);
+        Ok(Self::from_entries(library.entries))
+    }
+
+    /// Scans `<library_dir>/{skills,agents,claude-md,mcp}`; missing dirs are empty.
     pub fn scan(library_dir: &Path) -> Result<Self> {
         let mut entries = Vec::new();
         for kind in Kind::ALL {
@@ -55,6 +67,9 @@ fn scan_kind(dir: &Path, kind: Kind, out: &mut Vec<Entry>) -> Result<()> {
             {
                 (stem(&path), path.clone())
             }
+            Kind::Mcp if path.is_file() && path.extension().is_some_and(|e| e == "json") => {
+                (stem(&path), path.clone())
+            }
             _ => continue,
         };
         if !file.is_file() {
@@ -67,7 +82,10 @@ fn scan_kind(dir: &Path, kind: Kind, out: &mut Vec<Entry>) -> Result<()> {
         out.push(Entry {
             kind,
             name,
-            description: frontmatter::parse(&text).description,
+            description: match kind {
+                Kind::Mcp => McpServerDef::parse(&text).ok().and_then(|d| d.summary()),
+                _ => frontmatter::parse(&text).description,
+            },
             path: file,
             size_bytes,
         });
@@ -150,5 +168,23 @@ mod tests {
         assert!(lib.find(Kind::Agent, "zeta").is_none());
         assert_eq!(lib.of_kind(Kind::Agent).count(), 1);
         assert_eq!(lib.find(Kind::ClaudeMd, "personal").unwrap().size_bytes, 4);
+    }
+
+    #[test]
+    fn load_merges_library_with_installed_plugins() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = Paths::new(dir.path().join("bc"), dir.path().join("home"));
+        write(&paths.kind_dir(Kind::Skill).join("s/SKILL.md"), "s");
+        write(
+            &paths.installed_plugins_file(),
+            r#"{"plugins":{"p@mk":[{"installPath":"/x"}]}}"#,
+        );
+        let lib = Library::load(&paths).unwrap();
+        let names: Vec<_> = lib
+            .entries()
+            .iter()
+            .map(|e| (e.kind, e.name.as_str()))
+            .collect();
+        assert_eq!(names, [(Kind::Skill, "s"), (Kind::Plugin, "p@mk")]);
     }
 }

@@ -39,7 +39,7 @@ pub fn handle_key(app: &mut App, key: KeyCode) -> Action {
 
 pub fn run(paths: &Paths) -> Result<()> {
     let cfg = config::load(&paths.config_file())?;
-    let library = Library::scan(&paths.library_dir())?;
+    let library = Library::load(paths)?;
     let live = sessions::list_alive(&paths.sessions_dir(), &paths.run_dir())?;
     let mut app = App::new(cfg, library, live);
 

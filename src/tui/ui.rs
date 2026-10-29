@@ -7,7 +7,9 @@ use super::state::{App, Tab};
 
 fn headers(tab: Tab) -> [&'static str; 4] {
     match tab {
-        Tab::Skills | Tab::Agents | Tab::ClaudeMd => ["", "Name", "Profiles", "Description"],
+        Tab::Skills | Tab::Agents | Tab::ClaudeMd | Tab::Plugins | Tab::Mcp => {
+            ["", "Name", "Profiles", "Description"]
+        }
         Tab::Profiles => ["", "Profile", "Counts", "Match"],
         Tab::Sessions => ["", "Directory", "Process", "Profiles"],
     }

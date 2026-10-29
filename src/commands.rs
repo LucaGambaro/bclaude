@@ -82,16 +82,18 @@ pub fn execute(command: Command, paths: &Paths, cwd: &Path, out: &mut impl Write
     match command {
         Command::Ls { kind } => {
             let cfg = config::load(&paths.config_file())?;
-            let lib = Library::scan(&paths.library_dir())?;
+            let lib = Library::load(paths)?;
             emit(out, &report::render_ls(&lib, &cfg, kind))?;
         }
         Command::Which => {
             let cfg = config::load(&paths.config_file())?;
-            let lib = Library::scan(&paths.library_dir())?;
+            let lib = Library::load(paths)?;
             let resolved = resolve(&cfg, cwd, &paths.home);
             let composed = Composed {
                 plugin_dir: None,
                 claude_md: None,
+                settings_file: None,
+                mcp_config: None,
                 missing: report::missing_entries(&resolved, &lib),
             };
             emit(out, &report::render_which(cwd, &resolved, &composed, &lib))?;

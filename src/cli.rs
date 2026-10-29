@@ -22,14 +22,14 @@ pub struct Cli {
 pub enum Command {
     /// List library entries with their profiles and descriptions
     Ls {
-        #[arg(long, value_enum)]
+        #[arg(long, value_enum, ignore_case = true)]
         kind: Option<Kind>,
     },
     /// Show what applies to the current directory and why
     Which,
     /// Copy a skill dir / agent .md / CLAUDE.md fragment into the library
     Add {
-        #[arg(value_enum)]
+        #[arg(value_enum, ignore_case = true)]
         kind: Kind,
         path: PathBuf,
         #[arg(long)]
@@ -162,5 +162,24 @@ mod tests {
             Command::Which
         );
         assert!(Cli::try_parse_from(["bclaude", "add", "bogus", "/p"]).is_err());
+    }
+
+    #[test]
+    fn kind_values_ignore_case() {
+        let ls = Cli::try_parse_from(["bclaude", "ls", "--kind", "MCP"]).unwrap();
+        assert_eq!(
+            ls.command,
+            Command::Ls {
+                kind: Some(Kind::Mcp)
+            }
+        );
+        let add = Cli::try_parse_from(["bclaude", "add", "Skill", "/p"]).unwrap();
+        assert!(matches!(
+            add.command,
+            Command::Add {
+                kind: Kind::Skill,
+                ..
+            }
+        ));
     }
 }

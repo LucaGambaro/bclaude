@@ -11,15 +11,19 @@ pub enum Tab {
     Skills,
     Agents,
     ClaudeMd,
+    Plugins,
+    Mcp,
     Profiles,
     Sessions,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 5] = [
+    pub const ALL: [Tab; 7] = [
         Tab::Skills,
         Tab::Agents,
         Tab::ClaudeMd,
+        Tab::Plugins,
+        Tab::Mcp,
         Tab::Profiles,
         Tab::Sessions,
     ];
@@ -29,6 +33,8 @@ impl Tab {
             Tab::Skills => "Skills",
             Tab::Agents => "Agents",
             Tab::ClaudeMd => "CLAUDE.md",
+            Tab::Plugins => "Plugins",
+            Tab::Mcp => "MCP",
             Tab::Profiles => "Profiles",
             Tab::Sessions => "Sessions",
         }
@@ -39,6 +45,8 @@ impl Tab {
             Tab::Skills => Some(Kind::Skill),
             Tab::Agents => Some(Kind::Agent),
             Tab::ClaudeMd => Some(Kind::ClaudeMd),
+            Tab::Plugins => Some(Kind::Plugin),
+            Tab::Mcp => Some(Kind::Mcp),
             _ => None,
         }
     }
@@ -117,10 +125,12 @@ impl App {
                             p.match_paths.join(", ")
                         },
                         extra: format!(
-                            "{}s {}a {}m",
+                            "{}s {}a {}m {}p {}mcp",
                             p.skills.len(),
                             p.agents.len(),
-                            p.claude_md.len()
+                            p.claude_md.len(),
+                            p.plugins.len(),
+                            p.mcp.len()
                         ),
                         member: name == self.active_profile,
                         name,
@@ -179,7 +189,7 @@ impl App {
     /// Toggles the selected library entry in the active profile (library tabs only).
     pub fn toggle_membership(&mut self) {
         let (Some(kind), Some(row)) = (self.tab.kind(), self.selected_row()) else {
-            self.status = "toggle works on Skills / Agents / CLAUDE.md tabs".into();
+            self.status = "toggle works on Skills / Agents / CLAUDE.md / Plugins / MCP tabs".into();
             return;
         };
         let on = !row.member;
@@ -203,6 +213,17 @@ impl App {
             return String::new();
         };
         match self.tab.kind() {
+            Some(Kind::Plugin) => self
+                .library
+                .find(Kind::Plugin, &row.name)
+                .map(|e| format!("installed at:\n{}", e.path.display()))
+                .unwrap_or_default(),
+            // the file may hold secrets (env, headers): show only the summary
+            Some(Kind::Mcp) => self
+                .library
+                .find(Kind::Mcp, &row.name)
+                .and_then(|e| e.description.clone())
+                .unwrap_or_default(),
             Some(kind) => self
                 .library
                 .find(kind, &row.name)
@@ -217,10 +238,12 @@ impl App {
                     .cloned()
                     .unwrap_or_default();
                 format!(
-                    "skills: {}\nagents: {}\nclaude.md: {}\nmatch: {}",
+                    "skills: {}\nagents: {}\nclaude.md: {}\nplugins: {}\nmcp: {}\nmatch: {}",
                     p.skills.join(", "),
                     p.agents.join(", "),
                     p.claude_md.join(", "),
+                    p.plugins.join(", "),
+                    p.mcp.join(", "),
                     p.match_paths.join(", ")
                 )
             }
@@ -230,11 +253,13 @@ impl App {
                 .find(|s| s.cwd == row.name)
                 .map(|s| {
                     format!(
-                        "pid: {}\nskills: {}\nagents: {}\nclaude.md: {}",
+                        "pid: {}\nskills: {}\nagents: {}\nclaude.md: {}\nplugins: {}\nmcp: {}",
                         s.pid,
                         s.skills.join(", "),
                         s.agents.join(", "),
-                        s.claude_md.join(", ")
+                        s.claude_md.join(", "),
+                        s.plugins.join(", "),
+                        s.mcp.join(", ")
                     )
                 })
                 .unwrap_or_default(),
@@ -244,7 +269,7 @@ impl App {
     /// Re-reads config, library and live sessions from disk.
     pub fn reload(&mut self, paths: &Paths) -> crate::error::Result<()> {
         self.config = crate::config::load(&paths.config_file())?;
-        self.library = Library::scan(&paths.library_dir())?;
+        self.library = Library::load(paths)?;
         self.sessions = crate::sessions::list_alive(&paths.sessions_dir(), &paths.run_dir())?;
         self.move_selection(0);
         self.status = "reloaded".into();
@@ -290,6 +315,8 @@ mod tests {
             skills: vec!["a".into()],
             agents: vec![],
             claude_md: vec![],
+            plugins: vec![],
+            mcp: vec![],
             started_unix: 1,
         }];
         // keep the tempdir alive by leaking it: the file is read in preview tests
@@ -389,7 +416,7 @@ mod tests {
         assert_eq!(rows[1].name, "px");
         assert_eq!(rows[1].detail, "~/px/*");
         assert_eq!(rows[0].detail, "(always / manual)");
-        assert_eq!(rows[1].extra, "1s 0a 0m");
+        assert_eq!(rows[1].extra, "1s 0a 0m 0p 0mcp");
         assert!(rows[0].member);
         a.selected = 1;
         assert!(a.preview().contains("match: ~/px/*"));
@@ -397,6 +424,49 @@ mod tests {
         a.selected = 0;
         assert_eq!(a.rows()[0].extra, "pid 5");
         assert!(a.preview().contains("skills: a"));
+    }
+
+    #[test]
+    fn plugins_tab_toggles_membership_and_previews_install_path() {
+        let mut a = app();
+        a.library = Library::from_entries(vec![Entry {
+            kind: Kind::Plugin,
+            name: "p@mk".into(),
+            description: Some("Plug".into()),
+            path: PathBuf::from("/installed/p"),
+            size_bytes: 0,
+        }]);
+        a.tab = Tab::Plugins;
+        assert_eq!(a.rows()[0].detail, "Plug");
+        assert_eq!(a.preview(), "installed at:\n/installed/p");
+        a.toggle_membership();
+        assert!(a.config.is_member("global", Kind::Plugin, "p@mk"));
+        assert!(a.rows()[0].member);
+        a.tab = Tab::Profiles;
+        assert_eq!(a.rows()[0].extra, "1s 0a 0m 1p 0mcp");
+        assert!(a.preview().contains("plugins: p@mk"));
+    }
+
+    #[test]
+    fn mcp_preview_shows_only_the_summary() {
+        let mut a = app();
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("srv.json");
+        fs::write(&file, r#"{"command":"uvx","env":{"TOKEN":"secret"}}"#).unwrap();
+        a.library = Library::from_entries(vec![Entry {
+            kind: Kind::Mcp,
+            name: "srv".into(),
+            description: Some("uvx".into()),
+            path: file,
+            size_bytes: 1,
+        }]);
+        a.tab = Tab::Mcp;
+        assert_eq!(a.preview(), "uvx");
+        a.toggle_membership();
+        assert!(a.config.is_member("global", Kind::Mcp, "srv"));
+        a.tab = Tab::Profiles;
+        assert_eq!(a.rows()[0].extra, "1s 0a 0m 0p 1mcp");
+        assert!(a.preview().contains("mcp: srv"));
     }
 
     #[test]
