@@ -71,6 +71,8 @@ The full guide to profiles, glob rules and the dashboard workflow is in [docs/pr
 |---|---|
 | `bclaude [claude args]` | Launch claude with the composed config |
 | `bclaude --dry-run [args]` | Print the claude command that would run |
+| `bclaude --profile <name> [args]` | Also activate profile `<name>` (repeatable, e.g. `--profile a --profile b`), on top of the path-matched ones; unknown names are an error |
+| `bclaude --exclusive --profile <name> [args]` | Only `global` + the given profile(s): ignore path matches and `[projects.*]` overrides |
 | `bclaude ls [--kind skill\|agent\|md\|plugin\|mcp]` | List library entries, their profiles and descriptions |
 | `bclaude which` | What applies to the current dir, why, and estimated token cost |
 | `bclaude add <skill\|agent\|md\|mcp> <path> [--name n]` | Copy into the library (`mcp` takes a `.json` server definition) |

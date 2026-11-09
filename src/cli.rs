@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 
 use crate::commands;
 use crate::error::Result;
+use crate::resolve::ProfileRequest;
 use crate::types::Kind;
 
 const BUILTINS: [&str; 6] = ["ls", "which", "add", "import", "dash", "help"];
@@ -47,30 +48,58 @@ pub enum Route {
     /// Launch claude with the composed config; remaining args go to claude untouched.
     Run {
         dry_run: bool,
+        /// `--profile` / `--exclusive`: profiles requested on the command line.
+        request: ProfileRequest,
         args: Vec<String>,
     },
 }
 
 /// `bc <builtin> ...` is handled here; anything else is forwarded to claude.
+/// Leading `--dry-run`, `--exclusive` and `--profile <name>` / `--profile=<name>` are consumed by bclaude.
 pub fn route(args: Vec<String>) -> Route {
-    match args.first().map(String::as_str) {
-        Some(first) if BUILTINS.contains(&first) || first == "--help" || first == "-h" => {
-            Route::Builtin(args)
+    if let Some(first) = args.first().map(String::as_str)
+        && (BUILTINS.contains(&first) || first == "--help" || first == "-h")
+    {
+        return Route::Builtin(args);
+    }
+    let mut dry_run = false;
+    let mut request = ProfileRequest::default();
+    let mut rest = args.as_slice();
+    loop {
+        match rest {
+            [flag, tail @ ..] if flag == "--dry-run" => {
+                dry_run = true;
+                rest = tail;
+            }
+            [flag, tail @ ..] if flag == "--exclusive" => {
+                request.exclusive = true;
+                rest = tail;
+            }
+            [flag, name, tail @ ..] if flag == "--profile" => {
+                request.names.push(name.clone());
+                rest = tail;
+            }
+            [flag, tail @ ..] if flag.starts_with("--profile=") => {
+                request.names.push(flag["--profile=".len()..].to_string());
+                rest = tail;
+            }
+            _ => break,
         }
-        Some("--dry-run") => Route::Run {
-            dry_run: true,
-            args: args[1..].to_vec(),
-        },
-        _ => Route::Run {
-            dry_run: false,
-            args,
-        },
+    }
+    Route::Run {
+        dry_run,
+        request,
+        args: rest.to_vec(),
     }
 }
 
 pub fn run(args: Vec<String>) -> Result<i32> {
     match route(args) {
-        Route::Run { dry_run, args } => commands::run(dry_run, &args),
+        Route::Run {
+            dry_run,
+            request,
+            args,
+        } => commands::run(dry_run, &request, &args),
         Route::Builtin(args) => {
             let argv = std::iter::once("bclaude".to_string()).chain(args);
             match Cli::try_parse_from(argv) {
@@ -109,6 +138,7 @@ mod tests {
             route(v(&[])),
             Route::Run {
                 dry_run: false,
+                request: ProfileRequest::default(),
                 args: vec![]
             }
         );
@@ -116,6 +146,7 @@ mod tests {
             route(v(&["-c", "--model", "x"])),
             Route::Run {
                 dry_run: false,
+                request: ProfileRequest::default(),
                 args: v(&["-c", "--model", "x"])
             }
         );
@@ -123,6 +154,7 @@ mod tests {
             route(v(&["fix the bug"])),
             Route::Run {
                 dry_run: false,
+                request: ProfileRequest::default(),
                 args: v(&["fix the bug"])
             }
         );
@@ -134,7 +166,59 @@ mod tests {
             route(v(&["--dry-run", "-p", "hi"])),
             Route::Run {
                 dry_run: true,
+                request: ProfileRequest::default(),
                 args: v(&["-p", "hi"])
+            }
+        );
+    }
+
+    #[test]
+    fn profile_flags_are_consumed_in_any_order_before_claude_args() {
+        assert_eq!(
+            route(v(&["--profile", "a", "--dry-run", "--profile=b", "-c"])),
+            Route::Run {
+                dry_run: true,
+                request: ProfileRequest {
+                    names: v(&["a", "b"]),
+                    exclusive: false
+                },
+                args: v(&["-c"])
+            }
+        );
+    }
+
+    #[test]
+    fn exclusive_flag_is_consumed_with_profile() {
+        assert_eq!(
+            route(v(&["--exclusive", "--profile", "a", "-c"])),
+            Route::Run {
+                dry_run: false,
+                request: ProfileRequest {
+                    names: v(&["a"]),
+                    exclusive: true
+                },
+                args: v(&["-c"])
+            }
+        );
+    }
+
+    #[test]
+    fn profile_flag_after_claude_args_is_forwarded_untouched() {
+        assert_eq!(
+            route(v(&["-c", "--profile", "a"])),
+            Route::Run {
+                dry_run: false,
+                request: ProfileRequest::default(),
+                args: v(&["-c", "--profile", "a"])
+            }
+        );
+        // a dangling `--profile` without a value is left for claude to report
+        assert_eq!(
+            route(v(&["--profile"])),
+            Route::Run {
+                dry_run: false,
+                request: ProfileRequest::default(),
+                args: v(&["--profile"])
             }
         );
     }

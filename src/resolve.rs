@@ -12,6 +12,14 @@ pub struct Activation {
     pub reason: String,
 }
 
+/// Profiles requested on the command line (`--profile`, `--exclusive`).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProfileRequest {
+    pub names: Vec<String>,
+    /// Ignore path matches and project overrides: only `global` plus `names`.
+    pub exclusive: bool,
+}
+
 /// Names of everything that applies to a working directory.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Resolved {
@@ -67,8 +75,9 @@ fn pattern_matches(pattern: &str, cwd: &Path, home: &Path) -> bool {
     cwd.ancestors().any(|dir| glob.matches_path(dir))
 }
 
-/// Pure resolution: `global` (always), profiles whose `match` globs fit, then project overrides.
-pub fn resolve(config: &Config, cwd: &Path, home: &Path) -> Resolved {
+/// Pure resolution: `global` (always), explicitly requested profiles (`--profile`),
+/// profiles whose `match` globs fit, then project overrides.
+pub fn resolve(config: &Config, cwd: &Path, home: &Path, request: &ProfileRequest) -> Resolved {
     let mut resolved = Resolved::default();
     let activate = |resolved: &mut Resolved, profile: &str, reason: String| {
         if !resolved.activations.iter().any(|a| a.profile == profile) {
@@ -82,8 +91,11 @@ pub fn resolve(config: &Config, cwd: &Path, home: &Path) -> Resolved {
     if config.profiles.contains_key(GLOBAL_PROFILE) {
         activate(&mut resolved, GLOBAL_PROFILE, "always".into());
     }
+    for name in &request.names {
+        activate(&mut resolved, name, "--profile".into());
+    }
     for (name, profile) in &config.profiles {
-        if name == GLOBAL_PROFILE {
+        if request.exclusive || name == GLOBAL_PROFILE {
             continue;
         }
         if let Some(pat) = profile
@@ -97,7 +109,7 @@ pub fn resolve(config: &Config, cwd: &Path, home: &Path) -> Resolved {
     let overrides: Vec<_> = config
         .projects
         .iter()
-        .filter(|(key, _)| cwd.starts_with(expand_tilde(key, home)))
+        .filter(|(key, _)| !request.exclusive && cwd.starts_with(expand_tilde(key, home)))
         .collect();
     for (key, ov) in &overrides {
         for profile in &ov.profiles {
@@ -154,7 +166,12 @@ skills = ["only-solo"]
 
     #[test]
     fn global_only_outside_any_group() {
-        let r = resolve(&config(), Path::new("/tmp/x"), &home());
+        let r = resolve(
+            &config(),
+            Path::new("/tmp/x"),
+            &home(),
+            &ProfileRequest::default(),
+        );
         assert_eq!(r.profile_names(), ["global"]);
         assert_eq!(r.skills, ["g1"]);
         assert_eq!(r.claude_md, ["personal"]);
@@ -165,7 +182,12 @@ skills = ["only-solo"]
 
     #[test]
     fn group_match_adds_profile_with_dedupe_and_order() {
-        let r = resolve(&config(), Path::new("/h/work/px/repo"), &home());
+        let r = resolve(
+            &config(),
+            Path::new("/h/work/px/repo"),
+            &home(),
+            &ProfileRequest::default(),
+        );
         assert_eq!(r.profile_names(), ["global", "px"]);
         assert_eq!(r.skills, ["g1", "p1"]);
         assert_eq!(r.agents, ["rev"]);
@@ -174,20 +196,35 @@ skills = ["only-solo"]
 
     #[test]
     fn subdirectory_of_repo_still_matches() {
-        let r = resolve(&config(), Path::new("/h/work/px/repo/src/deep"), &home());
+        let r = resolve(
+            &config(),
+            Path::new("/h/work/px/repo/src/deep"),
+            &home(),
+            &ProfileRequest::default(),
+        );
         assert!(r.profile_names().contains(&"px".to_string()));
     }
 
     #[test]
     fn sibling_group_does_not_match() {
-        let r = resolve(&config(), Path::new("/h/work/other/r"), &home());
+        let r = resolve(
+            &config(),
+            Path::new("/h/work/other/r"),
+            &home(),
+            &ProfileRequest::default(),
+        );
         assert_eq!(r.profile_names(), ["global", "other"]);
         assert_eq!(r.skills, ["g1", "o1"]);
     }
 
     #[test]
     fn project_override_adds_profiles_and_extras() {
-        let r = resolve(&config(), Path::new("/h/work/solo/sub"), &home());
+        let r = resolve(
+            &config(),
+            Path::new("/h/work/solo/sub"),
+            &home(),
+            &ProfileRequest::default(),
+        );
         assert_eq!(r.profile_names(), ["global", "other"]);
         assert_eq!(r.activations[1].reason, "project ~/work/solo");
         assert_eq!(r.skills, ["g1", "o1", "only-solo"]);
@@ -203,15 +240,81 @@ skills = ["only-solo"]
                 ..Default::default()
             },
         );
-        let r = resolve(&cfg, Path::new("/h/work/px/repo"), &home());
+        let r = resolve(
+            &cfg,
+            Path::new("/h/work/px/repo"),
+            &home(),
+            &ProfileRequest::default(),
+        );
         assert_eq!(r.profile_names(), ["global", "px"]);
         assert_eq!(r.activations[1].reason, "match ~/work/px/*");
     }
 
     #[test]
+    fn explicit_profile_applies_anywhere_and_wins_the_reason() {
+        let explicit = request(&["px"], false);
+        let r = resolve(&config(), Path::new("/tmp/x"), &home(), &explicit);
+        assert_eq!(r.profile_names(), ["global", "px"]);
+        assert_eq!(r.activations[1].reason, "--profile");
+        assert_eq!(r.skills, ["g1", "p1"]);
+        assert_eq!(r.agents, ["rev"]);
+    }
+
+    fn request(names: &[&str], exclusive: bool) -> ProfileRequest {
+        ProfileRequest {
+            names: names.iter().map(|n| n.to_string()).collect(),
+            exclusive,
+        }
+    }
+
+    #[test]
+    fn exclusive_ignores_path_matches_and_project_overrides() {
+        let r = resolve(
+            &config(),
+            Path::new("/h/work/solo/sub"),
+            &home(),
+            &request(&["px"], true),
+        );
+        assert_eq!(r.profile_names(), ["global", "px"]);
+        assert_eq!(r.skills, ["g1", "p1"]);
+        assert!(!r.skills.contains(&"only-solo".to_string()));
+        let r = resolve(
+            &config(),
+            Path::new("/h/work/px/repo"),
+            &home(),
+            &request(&["other"], true),
+        );
+        assert_eq!(r.profile_names(), ["global", "other"]);
+    }
+
+    #[test]
+    fn exclusive_without_names_leaves_only_global() {
+        let r = resolve(
+            &config(),
+            Path::new("/h/work/px/repo"),
+            &home(),
+            &request(&[], true),
+        );
+        assert_eq!(r.profile_names(), ["global"]);
+    }
+
+    #[test]
+    fn explicit_profile_combines_with_path_matches_without_duplicates() {
+        let explicit = request(&["px", "other", "px"], false);
+        let r = resolve(&config(), Path::new("/h/work/px/repo"), &home(), &explicit);
+        assert_eq!(r.profile_names(), ["global", "px", "other"]);
+        assert_eq!(r.activations[1].reason, "--profile");
+    }
+
+    #[test]
     fn empty_config_resolves_to_nothing_and_unknown_profile_is_ignored() {
         assert_eq!(
-            resolve(&Config::default(), Path::new("/x"), &home()),
+            resolve(
+                &Config::default(),
+                Path::new("/x"),
+                &home(),
+                &ProfileRequest::default()
+            ),
             Resolved::default()
         );
         let mut cfg = Config::default();
@@ -222,7 +325,7 @@ skills = ["only-solo"]
                 ..Default::default()
             },
         );
-        let r = resolve(&cfg, Path::new("/x"), &home());
+        let r = resolve(&cfg, Path::new("/x"), &home(), &ProfileRequest::default());
         assert_eq!(r.profile_names(), ["ghost"]);
         assert!(r.skills.is_empty());
     }

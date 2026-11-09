@@ -10,7 +10,7 @@ use crate::launch;
 use crate::library::{self, Library};
 use crate::paths::Paths;
 use crate::report;
-use crate::resolve::resolve;
+use crate::resolve::{ProfileRequest, resolve};
 use crate::runner;
 use crate::tui;
 
@@ -24,29 +24,31 @@ fn emit(out: &mut impl Write, text: &str) -> Result<()> {
 }
 
 /// Default action: run `claude` with the composed config (or just print the command).
-pub fn run(dry_run: bool, args: &[String]) -> Result<i32> {
+pub fn run(dry_run: bool, request: &ProfileRequest, args: &[String]) -> Result<i32> {
     let paths = Paths::from_env()?;
     let cwd = cwd()?;
     if dry_run {
         return dry_run_report(
             &paths,
             &cwd,
+            request,
             args,
             &mut std::io::stdout(),
             &mut std::io::stderr(),
         );
     }
-    runner::run_session(&paths, &cwd, args, &launch::claude_bin())
+    runner::run_session(&paths, &cwd, request, args, &launch::claude_bin())
 }
 
 fn dry_run_report(
     paths: &Paths,
     cwd: &Path,
+    request: &ProfileRequest,
     args: &[String],
     out: &mut impl Write,
     err: &mut impl Write,
 ) -> Result<i32> {
-    let prepared = runner::prepare(paths, cwd, std::process::id(), args)?;
+    let prepared = runner::prepare(paths, cwd, std::process::id(), request, args)?;
     emit(
         out,
         &format!(
@@ -88,7 +90,7 @@ pub fn execute(command: Command, paths: &Paths, cwd: &Path, out: &mut impl Write
         Command::Which => {
             let cfg = config::load(&paths.config_file())?;
             let lib = Library::load(paths)?;
-            let resolved = resolve(&cfg, cwd, &paths.home);
+            let resolved = resolve(&cfg, cwd, &paths.home, &ProfileRequest::default());
             let composed = Composed {
                 plugin_dir: None,
                 claude_md: None,
@@ -221,7 +223,15 @@ mod tests {
         let (mut out, mut err) = (Vec::new(), Vec::new());
         let args = vec!["-c".to_string()];
         assert_eq!(
-            dry_run_report(&paths, Path::new("/w"), &args, &mut out, &mut err).unwrap(),
+            dry_run_report(
+                &paths,
+                Path::new("/w"),
+                &ProfileRequest::default(),
+                &args,
+                &mut out,
+                &mut err
+            )
+            .unwrap(),
             0
         );
         let line = text(out);
@@ -233,6 +243,43 @@ mod tests {
                 .run_dir()
                 .join(std::process::id().to_string())
                 .exists()
+        );
+    }
+
+    fn request(names: &[&str]) -> ProfileRequest {
+        ProfileRequest {
+            names: names.iter().map(|n| n.to_string()).collect(),
+            exclusive: false,
+        }
+    }
+
+    #[test]
+    fn dry_run_honours_explicit_profile_and_rejects_unknown() {
+        let (_d, paths) = setup();
+        write(
+            &paths.config_file(),
+            "[profiles.extra]\nclaude_md=[\"m\"]\n",
+        );
+        write(&paths.kind_dir(Kind::ClaudeMd).join("m.md"), "hi");
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let profiles = request(&["extra"]);
+        dry_run_report(&paths, Path::new("/w"), &profiles, &[], &mut out, &mut err).unwrap();
+        assert!(text(out).starts_with("claude --append-system-prompt-file "));
+
+        let unknown = request(&["ghost"]);
+        let result = dry_run_report(
+            &paths,
+            Path::new("/w"),
+            &unknown,
+            &[],
+            &mut Vec::new(),
+            &mut err,
+        );
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("unknown profile `ghost`")
         );
     }
 

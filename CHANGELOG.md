@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format is based on 
 - `--kind` and the `add` kind argument now accept any letter case (`MCP`, `Skill`).
 
 ### Added
+- `bclaude --profile <name>` (repeatable) activates a profile regardless of the current directory, on top of the path-matched ones; unknown profiles are rejected. `--exclusive` additionally ignores path matches and project overrides (only `global` + the requested profiles).
 - MCP server management: a new `mcp` kind (`mcp = [...]` in profiles and project overrides, `bclaude ls/add/import` support, an MCP tab in the dashboard). Selected servers are written to a per-session `mcp.json` and passed with `--mcp-config --strict-mcp-config`, so only those servers load.
 - Plugin management: a new `plugin` kind (`plugins = [...]` in profiles and project overrides, `bclaude ls --kind plugin`, a Plugins tab in the dashboard). Plugins are read from Claude Code's installed plugins and enabled per session through a generated `--settings` file; when any plugin is selected, all other installed plugins are disabled for that session.
 

@@ -49,6 +49,10 @@ bclaude which          # active profiles (and why), entries, estimated tokens, m
 bclaude --dry-run      # the exact claude command that would run
 ```
 
+### Activating a profile explicitly
+
+Profiles don't have to come from the directory: `bclaude --profile acme` activates `acme` wherever you are, in addition to `global` and whatever the path rules match. The flag is repeatable (`--profile a --profile b`, or `--profile=a`) and combines with `--dry-run`. It must come **before** the arguments for `claude`; later occurrences are forwarded to `claude` untouched. Add `--exclusive` to ignore the directory entirely: only `global` plus the requested profiles apply (no `match` globs, no `[projects.*]` overrides). `--exclusive` without `--profile` is an error. An unknown profile name aborts the launch with an error. `bclaude which` only looks at the directory; use `bclaude --dry-run --profile acme` to preview the command.
+
 ### Plugins
 
 Plugins are referenced by id (`name@marketplace`), exactly as Claude Code registers them in `~/.claude/plugins/installed_plugins.json`; list them with `bclaude ls --kind plugin`. They are never copied into the library: install them with `claude plugin install`. Rules at launch:

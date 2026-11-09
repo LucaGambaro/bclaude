@@ -8,7 +8,7 @@ use crate::error::{BcError, Result};
 use crate::launch;
 use crate::library::Library;
 use crate::paths::Paths;
-use crate::resolve::{Resolved, resolve};
+use crate::resolve::{ProfileRequest, Resolved, resolve};
 use crate::sessions::{self, SessionRecord};
 
 /// Everything needed to start (or just print) a composed session.
@@ -20,11 +20,31 @@ pub struct Prepared {
     pub session_dir: PathBuf,
 }
 
-/// Resolves the profile set for `cwd` and materialises it under `<run_dir>/<pid>`.
-pub fn prepare(paths: &Paths, cwd: &Path, pid: u32, user_args: &[String]) -> Result<Prepared> {
+/// Resolves the profile set for `cwd` plus the explicitly requested `profiles`
+/// and materialises it under `<run_dir>/<pid>`.
+pub fn prepare(
+    paths: &Paths,
+    cwd: &Path,
+    pid: u32,
+    request: &ProfileRequest,
+    user_args: &[String],
+) -> Result<Prepared> {
     let cfg = config::load(&paths.config_file())?;
+    if request.exclusive && request.names.is_empty() {
+        return Err(BcError::Invalid("--exclusive requires --profile".into()));
+    }
+    if let Some(unknown) = request
+        .names
+        .iter()
+        .find(|p| !cfg.profiles.contains_key(*p))
+    {
+        return Err(BcError::Invalid(format!(
+            "unknown profile `{unknown}` (see [profiles.*] in {})",
+            paths.config_file().display()
+        )));
+    }
     let library = Library::load(paths)?;
-    let resolved = resolve(&cfg, cwd, &paths.home);
+    let resolved = resolve(&cfg, cwd, &paths.home, request);
     let session_dir = paths.run_dir().join(pid.to_string());
     if session_dir.exists() {
         fs::remove_dir_all(&session_dir).map_err(|e| BcError::io(&session_dir, e))?;
@@ -55,9 +75,15 @@ pub fn record_for(prepared: &Prepared, cwd: &Path, pid: u32) -> SessionRecord {
 
 /// Full lifecycle: compose, register session, run claude, always clean up.
 /// Returns claude's exit code.
-pub fn run_session(paths: &Paths, cwd: &Path, user_args: &[String], bin: &str) -> Result<i32> {
+pub fn run_session(
+    paths: &Paths,
+    cwd: &Path,
+    request: &ProfileRequest,
+    user_args: &[String],
+    bin: &str,
+) -> Result<i32> {
     let pid = std::process::id();
-    let prepared = prepare(paths, cwd, pid, user_args)?;
+    let prepared = prepare(paths, cwd, pid, request, user_args)?;
     let record_file = sessions::write(&paths.sessions_dir(), &record_for(&prepared, cwd, pid))?;
     let outcome = launch::run(bin, &prepared.args);
     let cleanup = cleanup(&record_file, &prepared.session_dir);
@@ -102,9 +128,27 @@ mod tests {
     }
 
     #[test]
+    fn exclusive_needs_a_profile() {
+        let (_d, paths) = setup();
+        let request = ProfileRequest {
+            names: vec![],
+            exclusive: true,
+        };
+        let err = prepare(&paths, Path::new("/any"), 5, &request, &[]).unwrap_err();
+        assert!(err.to_string().contains("--exclusive requires --profile"));
+    }
+
+    #[test]
     fn prepare_composes_and_builds_args() {
         let (_d, paths) = setup();
-        let p = prepare(&paths, Path::new("/any"), 7, &["-c".into()]).unwrap();
+        let p = prepare(
+            &paths,
+            Path::new("/any"),
+            7,
+            &ProfileRequest::default(),
+            &["-c".into()],
+        )
+        .unwrap();
         assert_eq!(p.session_dir, paths.run_dir().join("7"));
         assert_eq!(p.args.len(), 5);
         assert_eq!(p.args.last().unwrap(), "-c");
@@ -114,14 +158,37 @@ mod tests {
     #[test]
     fn prepare_replaces_leftover_session_dir() {
         let (_d, paths) = setup();
-        prepare(&paths, Path::new("/any"), 7, &[]).unwrap();
-        assert!(prepare(&paths, Path::new("/any"), 7, &[]).is_ok());
+        prepare(
+            &paths,
+            Path::new("/any"),
+            7,
+            &ProfileRequest::default(),
+            &[],
+        )
+        .unwrap();
+        assert!(
+            prepare(
+                &paths,
+                Path::new("/any"),
+                7,
+                &ProfileRequest::default(),
+                &[]
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn record_reflects_resolution() {
         let (_d, paths) = setup();
-        let p = prepare(&paths, Path::new("/any"), 9, &[]).unwrap();
+        let p = prepare(
+            &paths,
+            Path::new("/any"),
+            9,
+            &ProfileRequest::default(),
+            &[],
+        )
+        .unwrap();
         let r = record_for(&p, Path::new("/any"), 9);
         assert_eq!((r.pid, r.cwd.as_str()), (9, "/any"));
         assert_eq!(r.profiles, ["global"]);
@@ -131,7 +198,14 @@ mod tests {
     #[test]
     fn run_session_returns_exit_code_and_cleans_up() {
         let (_d, paths) = setup();
-        let code = run_session(&paths, Path::new("/any"), &[], "true").unwrap();
+        let code = run_session(
+            &paths,
+            Path::new("/any"),
+            &ProfileRequest::default(),
+            &[],
+            "true",
+        )
+        .unwrap();
         assert_eq!(code, 0);
         assert!(sessions::list(&paths.sessions_dir()).unwrap().is_empty());
         assert!(
@@ -145,7 +219,13 @@ mod tests {
     #[test]
     fn run_session_cleans_up_even_when_launch_fails() {
         let (_d, paths) = setup();
-        let err = run_session(&paths, Path::new("/any"), &[], "definitely-not-a-binary-bc");
+        let err = run_session(
+            &paths,
+            Path::new("/any"),
+            &ProfileRequest::default(),
+            &[],
+            "definitely-not-a-binary-bc",
+        );
         assert!(matches!(err, Err(BcError::Launch { .. })));
         assert!(sessions::list(&paths.sessions_dir()).unwrap().is_empty());
     }
@@ -154,7 +234,14 @@ mod tests {
     fn cleanup_is_idempotent() {
         let (_d, paths) = setup();
         let pid = std::process::id();
-        let p = prepare(&paths, Path::new("/any"), pid, &[]).unwrap();
+        let p = prepare(
+            &paths,
+            Path::new("/any"),
+            pid,
+            &ProfileRequest::default(),
+            &[],
+        )
+        .unwrap();
         let rec = sessions::write(
             &paths.sessions_dir(),
             &record_for(&p, Path::new("/any"), pid),
